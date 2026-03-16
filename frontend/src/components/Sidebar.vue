@@ -84,10 +84,10 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 <style scoped>
 .sidebar {
   width: 260px;
-  background: #171717;
+  background: linear-gradient(180deg, #1e3a5f 0%, #152d4a 100%);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid rgba(255,255,255,0.08);
+  border-right: 1px solid rgba(59, 130, 246, 0.15);
   transition: width 0.3s ease;
   position: relative;
   flex-shrink: 0;
@@ -103,9 +103,9 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   top: 16px;
   left: 8px;
   z-index: 100;
-  background: #2a2a2a;
-  border: 1px solid rgba(255,255,255,0.1);
-  color: #b4b4b4;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  color: #3b82f6;
   width: 36px;
   height: 36px;
   border-radius: 8px;
@@ -114,10 +114,11 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 }
 .sidebar-toggle-open:hover {
-  background: #3a3a3a;
-  color: #fff;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
 .sidebar-inner {
@@ -140,17 +141,18 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 }
 .brand-icon {
   font-size: 22px;
+  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.5));
 }
 .brand-text {
   font-size: 17px;
   font-weight: 700;
-  color: #e5e5e5;
+  color: #e2e8f0;
   letter-spacing: -0.5px;
 }
 .sidebar-close {
   background: none;
   border: none;
-  color: #6b6b6b;
+  color: rgba(148, 163, 184, 0.6);
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
@@ -160,7 +162,7 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 }
 .sidebar-close:hover {
   background: rgba(255,255,255,0.08);
-  color: #b4b4b4;
+  color: #93c5fd;
 }
 
 .new-chat-btn {
@@ -170,17 +172,19 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   gap: 8px;
   width: 100%;
   padding: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
+  border: 1px solid rgba(96, 165, 250, 0.25);
   border-radius: 10px;
-  background: transparent;
-  color: #e5e5e5;
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
   font-size: 14px;
   cursor: pointer;
   transition: all 0.2s;
   margin-bottom: 20px;
 }
 .new-chat-btn:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(96, 165, 250, 0.4);
+  color: #bfdbfe;
 }
 
 .section-title {
@@ -189,7 +193,7 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   gap: 8px;
   font-size: 11px;
   font-weight: 600;
-  color: #6b6b6b;
+  color: rgba(148, 163, 184, 0.6);
   text-transform: uppercase;
   letter-spacing: 1px;
   padding: 0 4px;
@@ -199,7 +203,7 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   margin-left: auto;
   background: none;
   border: none;
-  color: #6b6b6b;
+  color: rgba(148, 163, 184, 0.6);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -208,8 +212,8 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   transition: all 0.2s;
 }
 .add-ds-btn:hover {
-  color: #10a37f;
-  background: rgba(16, 163, 127, 0.1);
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.15);
 }
 
 .ds-list {
@@ -228,10 +232,11 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   position: relative;
 }
 .ds-item:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(59, 130, 246, 0.1);
 }
 .ds-item.active {
-  background: rgba(255,255,255,0.1);
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(96, 165, 250, 0.2);
 }
 .ds-item-icon {
   font-size: 20px;
@@ -249,7 +254,7 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 }
 .ds-item-name {
   font-size: 14px;
-  color: #e5e5e5;
+  color: #e2e8f0;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -257,14 +262,14 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 }
 .ds-item-type {
   font-size: 11px;
-  color: #6b6b6b;
+  color: rgba(148, 163, 184, 0.6);
   margin-top: 1px;
 }
 .ds-delete-btn {
   opacity: 0;
   background: none;
   border: none;
-  color: #6b6b6b;
+  color: rgba(148, 163, 184, 0.6);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -276,24 +281,24 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   opacity: 1;
 }
 .ds-delete-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.15);
 }
 
 .empty-ds {
   text-align: center;
   padding: 30px 10px;
-  color: #4a4a4a;
+  color: rgba(148, 163, 184, 0.4);
   font-size: 13px;
 }
 .empty-ds .hint {
-  color: #3a3a3a;
+  color: rgba(148, 163, 184, 0.3);
   font-size: 12px;
 }
 
 .sidebar-footer {
   padding: 12px 4px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid rgba(96, 165, 250, 0.1);
   margin-top: auto;
 }
 .footer-info {
@@ -301,6 +306,6 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #4a4a4a;
+  color: rgba(148, 163, 184, 0.4);
 }
 </style>

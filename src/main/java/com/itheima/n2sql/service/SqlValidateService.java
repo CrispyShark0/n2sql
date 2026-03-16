@@ -101,24 +101,50 @@ public class SqlValidateService {
         // --- 第一步：校验表名 ---
         // TablesNamesFinder 是 JSQLParser 自带的工具，能从 SQL 中提取所有表名
         // 它能自动处理别名（如 users u → 提取 users）、JOIN、子查询等
-        TablesNamesFinder tablesFinder = new TablesNamesFinder();
-        List<String> sqlTableNames = tablesFinder.getTableList(statement);
+        try {
+            TablesNamesFinder tablesFinder = new TablesNamesFinder();
+            List<String> sqlTableNames = tablesFinder.getTableList(statement);
 
-        for (String tableName : sqlTableNames) {
-            if (!allTableNames.contains(tableName.toLowerCase())) {
-                // 找出最相似的表名，给出修正建议
-                String suggestion = findSimilar(tableName, allTableNames);
-                String errorMsg = "表 '" + tableName + "' 不存在于数据库中。"
-                        + "数据库中的表有: " + allTableNames
-                        + (suggestion != null ? "。你是不是想用: " + suggestion : "");
-                log.warn("Schema 校验失败（表名）: {}", errorMsg);
-                return ValidationResult.fail(errorMsg);
+            for (String tableName : sqlTableNames) {
+                if (!allTableNames.contains(tableName.toLowerCase())) {
+                    // 找出最相似的表名，给出修正建议
+                    String suggestion = findSimilar(tableName, allTableNames);
+                    String errorMsg = "表 '" + tableName + "' 不存在于数据库中。"
+                            + "数据库中的表有: " + allTableNames
+                            + (suggestion != null ? "。你是不是想用: " + suggestion : "");
+                    log.warn("Schema 校验失败（表名）: {}", errorMsg);
+                    return ValidationResult.fail(errorMsg);
+                }
             }
+        } catch (Exception e) {
+            // 某些复杂 SQL（如嵌套子查询、UNION 等）TablesNamesFinder 可能异常
+            // 跳过表名校验，交给数据库执行阶段处理
+            log.warn("表名提取失败（复杂SQL），跳过表名校验: {}", e.getMessage());
         }
 
-        // --- 第二步：校验列名 ---
+        // --- 第二步：校验列名（仅对简单 PlainSelect 做，复杂SQL跳过） ---
+        // 对于嵌套子查询、UNION 等复杂语句，列名校验交给数据库执行阶段
+        // 因为子查询的别名列、窗口函数的计算列无法在静态阶段准确判定
+        if (!(statement instanceof Select select)) {
+            return ValidationResult.ok();
+        }
+
+        // 获取最外层的 Select 体
+        PlainSelect plainSelect = getOutermostPlainSelect(select);
+        if (plainSelect == null) {
+            // 非 PlainSelect（如 UNION、复杂子查询包裹），跳过列名校验
+            log.debug("非 PlainSelect 语句，跳过列名静态校验，交给数据库执行阶段验证");
+            return ValidationResult.ok();
+        }
+
+        // 如果 FROM 子句是子查询（如 SELECT * FROM (SELECT ...) sub），也跳过列名校验
+        FromItem fromItem = plainSelect.getFromItem();
+        if (fromItem != null && !(fromItem instanceof Table)) {
+            log.debug("FROM 子句为子查询，跳过列名静态校验");
+            return ValidationResult.ok();
+        }
+
         // 构建 SQL 中的别名映射：别名 → 真实表名
-        // 例如 "SELECT u.name FROM users u" 中 u → users
         Map<String, String> aliasToTable = buildAliasMap(statement);
 
         // 从 SQL 中提取所有列引用
@@ -170,6 +196,17 @@ public class SqlValidateService {
         }
 
         return ValidationResult.ok();
+    }
+
+    /**
+     * 从 Select 语句中获取最外层的 PlainSelect
+     * 如果是 SetOperationList（UNION）或其他复杂结构，返回 null
+     */
+    private PlainSelect getOutermostPlainSelect(Select select) {
+        if (select instanceof PlainSelect ps) {
+            return ps;
+        }
+        return null;
     }
 
     /**

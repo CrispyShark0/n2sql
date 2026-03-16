@@ -1011,6 +1011,23 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 - OK 支持表别名（u.name 能正确解析为 users.name）
 - 已修复 JSQLParser 4.9 API 兼容问题：移除了 SelectBody 和 SelectExpressionItem 的使用
 
+**2026-03-16 Bug修复：复杂嵌套查询静态校验误判**
+
+问题：当大模型为"查询销售额最高的产品类别，以及该类别下卖得最好的产品"等复杂问题
+生成含子查询的SQL（如 `SELECT * FROM (SELECT ... ROW_NUMBER() ...) sub`）时，
+原有的 `buildAliasMap()` 和 `extractColumns()` 只处理 `PlainSelect`，
+导致子查询/UNION/窗口函数等复杂SQL被误判为"列不存在"或抛异常。
+
+修复内容：
+1. **表名校验容错** — `TablesNamesFinder.getTableList()` 包裹 try-catch
+   - 复杂SQL导致表名提取异常时，跳过表名校验，交给数据库执行阶段处理
+2. **列名校验智能跳过** — 三层判断：
+   - `Select` 不是 `PlainSelect`（如 UNION、SetOperationList）→ 跳过列名校验
+   - FROM 子句不是真实表（是子查询 SubSelect）→ 跳过列名校验
+   - 只有简单 `PlainSelect` 且 FROM 是真实 `Table` → 正常进行列名校验
+3. **新增辅助方法** `getOutermostPlainSelect(Select)` — 安全地从 Select 中提取 PlainSelect
+4. **设计理念** — 静态校验只处理"有把握的简单情况"，复杂查询完全交给数据库执行阶段 + 自纠错反馈闭环
+
 ---
 
 ### 28. Nl2SqlService.java（核心 NL2SQL 转换服务 - 项目的心脏）
@@ -1346,7 +1363,7 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ## 最终 Review 总结（更新）
 
-**项目当前状态：六个阶段全部完成，编译零错误。**
+**项目当前状态：六个阶段全部完成 + 前端改版 + Bug修复，编译零错误。**
 
 **已完成的全部功能：**
 1. 基础架构 — 动态数据源管理、连接池、Schema自动扫描
@@ -1355,8 +1372,133 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 4. 复杂SQL — 查询意图分类 + 4套专用提示词模板 + 动态路由
 5. 多方言 — 自动检测数据库类型 + 方言提示注入
 6. REST API — 6个HTTP接口，可用Postman测试
+7. 前端界面 — Vue 3 + Vite，蓝白科技风，ChatGPT风格交互
+8. Bug修复 — 复杂嵌套查询静态校验误判问题已修复
+
+**2026-03-16 更新内容：**
+- 修复 SqlValidateService 对复杂嵌套SQL的静态校验误判
+- 前端从深色主题改为蓝白科技风（Blue-White Tech Theme）
 
 **下一步：**
-- 准备 DeepSeek API Key + MySQL 数据库
-- 用 Postman 实测整个系统
 - 第七阶段：用 Spider/BIRD 测试集量化准确率
+
+---
+
+## 第十三部分：前端界面（Vue 3 + Vite）
+
+### 前端技术栈
+| 技术 | 版本 | 作用 |
+|------|------|------|
+| Vue 3 | 3.4 | 前端框架（Composition API） |
+| Vite | 5.1 | 构建工具（开发热更新） |
+| Axios | 1.6 | HTTP 请求库 |
+| highlight.js | 11.9 | SQL 语法高亮 |
+| ECharts | 6.0 | 图表可视化（预留） |
+| Element Plus | 2.6 | UI 组件库（预留） |
+
+### 前端文件结构
+```
+frontend/
+├── index.html              <- 入口HTML，引入Inter字体
+├── package.json            <- 依赖清单
+├── vite.config.js          <- Vite配置（代理/api到8080）
+├── public/
+└── src/
+    ├── main.js             <- Vue应用入口
+    ├── App.vue             <- 主页面（欢迎屏+消息区+输入框）
+    ├── api/
+    │   └── index.js        <- Axios封装（6个API接口）
+    └── components/
+        ├── Sidebar.vue     <- 侧边栏（数据源管理+新建对话）
+        ├── ChatMessage.vue <- 消息组件（SQL块+表格+纠错信息）
+        └── DataSourceModal.vue <- 添加数据源弹窗
+```
+
+### 39. index.html（入口页面）
+
+引入 Google Fonts Inter 字体，提供更专业的排版效果。
+`<div id="app"></div>` 是 Vue 应用的挂载点。
+
+### 40. vite.config.js（Vite 构建配置）
+
+配置开发服务器端口 5173，并设置 `/api` 路径代理到后端 `localhost:8080`。
+这样前端开发时可以直接调用 `/api/xxx`，Vite 会自动转发到后端。
+
+### 41. api/index.js（API 封装）
+
+使用 Axios 封装了6个后端接口：
+- `listDataSources()` — GET /api/datasource
+- `createDataSource(data)` — POST /api/datasource
+- `testConnection(data)` — POST /api/datasource/test
+- `deleteDataSource(id)` — DELETE /api/datasource/{id}
+- `askQuestion(dataSourceId, question)` — POST /api/nl2sql
+
+响应拦截器自动解析 `res.data`，处理 `code=200` 和 `success=false` 两种情况。
+
+### 42. App.vue（主页面组件）
+
+整个应用的根组件，包含：
+- **布局**：左侧 Sidebar + 右侧主区域（flex 布局）
+- **欢迎屏**：当无消息时显示，含4个示例查询卡片和系统能力说明
+- **消息区**：ChatGPT 风格的对话列表，用户消息和AI响应交替显示
+- **输入区**：底部固定输入框，支持 Enter 发送、Shift+Enter 换行、自动调高
+- **数据源弹窗**：点击侧边栏的 + 按钮弹出
+
+核心逻辑：
+- `sendMessage()` — 发送问题 → 调用 `/api/nl2sql` → 解析响应 → 展示结果
+- `tryExample(text)` — 点击示例卡片自动填入并发送
+- `loadDataSources()` — 页面加载时获取数据源列表
+
+### 43. Sidebar.vue（侧边栏组件）
+
+深蓝渐变背景的侧边栏，包含：
+- **品牌标识**：⚡ NL2SQL
+- **New Chat 按钮**：清空对话
+- **DATA SOURCES 列表**：显示所有已注册数据源，支持选择/删除
+- **折叠功能**：可收起侧边栏释放主区域空间
+- **底部标识**：Powered by DeepSeek
+
+### 44. ChatMessage.vue（消息组件）
+
+根据消息类型（user/ai）渲染不同内容：
+- **用户消息**：简单文本 + 紫色头像
+- **AI 消息**：
+  - 错误提示（红色区块）
+  - SQL 代码块（深蓝头部 + 语法高亮 + 复制按钮）
+  - 查询结果表格（白色背景 + 蓝色边框，支持展开/收起）
+  - 自纠错提示（黄色，显示重试次数）
+  - 执行耗时元信息
+
+SQL 语法高亮使用 highlight.js 的 `atom-one-dark` 主题（SQL块背景为深色，形成对比）。
+
+### 45. DataSourceModal.vue（数据源弹窗）
+
+Teleport 到 body 的模态弹窗，包含：
+- **表单字段**：连接名称、数据库类型（MySQL/PostgreSQL）、主机、端口、数据库名、用户名、密码
+- **测试连接按钮**：调用后端 `/api/datasource/test`，显示成功/失败结果
+- **保存按钮**：调用后端 `/api/datasource` 创建数据源
+
+### 前端配色方案（2026-03-16 蓝白科技风改版）
+
+| 元素 | 色值 | 说明 |
+|------|------|------|
+| 主背景 | #f0f4f8 → #e8eef6 | 淡灰蓝渐变 |
+| 侧边栏 | #1e3a5f → #152d4a | 深蓝渐变 |
+| 主色/按钮 | #3b82f6 → #2563eb | 蓝色渐变 |
+| 文字主色 | #1e293b | 深灰 |
+| 次要文字 | #64748b | 中灰 |
+| SQL块头 | #1e3a5f → #1e40af | 深蓝渐变 |
+| SQL代码 | #0f172a | 深海蓝（保持深色对比） |
+| 表格/弹窗 | #ffffff | 纯白 |
+| 连接状态点 | #3b82f6 + 蓝色光晕 | 蓝色脉冲 |
+| 头像（用户） | #6366f1 → #818cf8 | 紫色渐变 |
+| 头像（AI） | #3b82f6 → #60a5fa | 蓝色渐变 |
+
+**Review 检查：**
+- OK Composition API (setup) 使用规范
+- OK 响应式设计，移动端适配
+- OK API 层统一封装，便于维护
+- OK 组件拆分合理（Sidebar/ChatMessage/DataSourceModal）
+- OK SQL 语法高亮提升了代码可读性
+- OK 错误处理完善（网络错误/业务错误都有展示）
+

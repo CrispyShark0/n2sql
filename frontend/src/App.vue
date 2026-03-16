@@ -327,9 +327,9 @@ const copySql = (sql) => {
 
 html, body {
   height: 100%;
-  background: #212121;
-  color: #ececf1;
-  font-family: 'Söhne', 'ui-sans-serif', 'system-ui', -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji';
+  background: #f0f4f8;
+  color: #1e293b;
+  font-family: 'Inter', 'Söhne', 'ui-sans-serif', 'system-ui', -apple-system, 'Segoe UI', Roboto, Ubuntu, Cantarell, 'Noto Sans', sans-serif, 'Helvetica Neue', Arial;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -346,17 +346,17 @@ html, body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255,255,255,0.1);
+  background: rgba(59, 130, 246, 0.2);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(59, 130, 246, 0.35);
 }
 
-/* hljs overrides for dark theme */
+/* hljs overrides for light theme */
 .hljs {
   background: transparent !important;
-  color: #e6e6e6 !important;
+  color: #1e293b !important;
 }
 </style>
 
@@ -373,7 +373,7 @@ html, body {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  background: #212121;
+  background: linear-gradient(180deg, #f0f4f8 0%, #e8eef6 100%);
 }
 
 /* Top Bar */
@@ -383,11 +383,14 @@ html, body {
   gap: 12px;
   padding: 12px 16px;
   height: 52px;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.1);
 }
 .topbar-toggle {
   background: none;
   border: none;
-  color: #b4b4b4;
+  color: #64748b;
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
@@ -396,13 +399,13 @@ html, body {
   transition: all 0.2s;
 }
 .topbar-toggle:hover {
-  background: rgba(255,255,255,0.08);
-  color: #fff;
+  background: rgba(59, 130, 246, 0.08);
+  color: #3b82f6;
 }
 .topbar-title {
   font-size: 16px;
   font-weight: 600;
-  color: #e5e5e5;
+  color: #1e40af;
 }
 
 /* Status Bar */
@@ -412,9 +415,10 @@ html, body {
   gap: 8px;
   padding: 8px 24px;
   font-size: 13px;
-  color: #8e8ea0;
-  background: rgba(255,255,255,0.02);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.08);
 }
 .status-dot {
   width: 8px;
@@ -422,19 +426,19 @@ html, body {
   border-radius: 50%;
 }
 .status-dot.connected {
-  background: #10a37f;
-  box-shadow: 0 0 6px rgba(16, 163, 127, 0.5);
+  background: #3b82f6;
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
 }
 .status-bar strong {
-  color: #e5e5e5;
+  color: #1e40af;
 }
 .status-type {
-  background: rgba(255,255,255,0.06);
+  background: rgba(59, 130, 246, 0.08);
   padding: 2px 8px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: #6b7280;
+  color: #3b82f6;
 }
 
 /* ========== Messages Area ========== */
@@ -452,8 +456,9 @@ html, body {
   background: transparent;
 }
 .message-band.ai {
-  background: #2a2a2a;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.06);
 }
 
 /* ========== Welcome Screen ========== */
@@ -467,19 +472,22 @@ html, body {
   text-align: center;
 }
 .welcome-icon {
-  font-size: 48px;
+  font-size: 52px;
   margin-bottom: 16px;
-  filter: drop-shadow(0 0 20px rgba(16, 163, 127, 0.4));
+  filter: drop-shadow(0 0 24px rgba(59, 130, 246, 0.4));
 }
 .welcome-screen h1 {
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 700;
-  color: #e5e5e5;
+  background: linear-gradient(135deg, #1e40af, #3b82f6, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   margin-bottom: 8px;
   letter-spacing: -0.5px;
 }
 .welcome-subtitle {
-  color: #8e8ea0;
+  color: #64748b;
   font-size: 15px;
   margin-bottom: 40px;
 }
@@ -497,17 +505,19 @@ html, body {
   align-items: flex-start;
   gap: 12px;
   padding: 16px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(59, 130, 246, 0.12);
   border-radius: 12px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s ease;
   text-align: left;
+  backdrop-filter: blur(8px);
 }
 .feature-card:hover {
-  background: rgba(255,255,255,0.07);
-  border-color: rgba(255,255,255,0.15);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.12);
 }
 .feature-icon {
   font-size: 24px;
@@ -517,12 +527,12 @@ html, body {
 .feature-title {
   font-size: 14px;
   font-weight: 600;
-  color: #e5e5e5;
+  color: #1e40af;
   margin-bottom: 4px;
 }
 .feature-desc {
   font-size: 12.5px;
-  color: #8e8ea0;
+  color: #64748b;
   line-height: 1.4;
 }
 
@@ -537,7 +547,10 @@ html, body {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #8e8ea0;
+  color: #64748b;
+}
+.cap-item svg {
+  stroke: #3b82f6;
 }
 
 /* ========== Loading Message ========== */
@@ -552,13 +565,14 @@ html, body {
 .loading-avatar {
   width: 36px;
   height: 36px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #10a37f, #19c99d);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #3b82f6, #60a5fa);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
 }
 .loading-content {
   display: flex;
@@ -567,7 +581,7 @@ html, body {
   padding-top: 6px;
 }
 .loading-text {
-  color: #8e8ea0;
+  color: #64748b;
   font-size: 14px;
 }
 
@@ -579,7 +593,7 @@ html, body {
 .typing-indicator span {
   width: 8px;
   height: 8px;
-  background: #10a37f;
+  background: #3b82f6;
   border-radius: 50%;
   animation: typingBounce 1.4s infinite ease-in-out;
 }
@@ -600,7 +614,7 @@ html, body {
 /* ========== Input Area ========== */
 .input-wrapper {
   padding: 12px 24px 20px;
-  background: #212121;
+  background: linear-gradient(180deg, transparent 0%, rgba(240, 244, 248, 0.95) 30%);
 }
 .input-container {
   max-width: 800px;
@@ -609,22 +623,24 @@ html, body {
 .input-box {
   display: flex;
   align-items: flex-end;
-  background: #2f2f2f;
-  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(59, 130, 246, 0.2);
   border-radius: 16px;
   padding: 10px 12px 10px 18px;
-  transition: border-color 0.2s;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.08);
+  backdrop-filter: blur(12px);
 }
 .input-box:focus-within {
-  border-color: rgba(255,255,255,0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 4px 24px rgba(59, 130, 246, 0.15);
 }
 .input-box textarea {
   flex: 1;
   background: none;
   border: none;
   outline: none;
-  color: #ececf1;
+  color: #1e293b;
   font-size: 15px;
   line-height: 1.5;
   resize: none;
@@ -633,7 +649,7 @@ html, body {
   padding: 4px 0;
 }
 .input-box textarea::placeholder {
-  color: #6b6b6b;
+  color: #94a3b8;
 }
 .input-box textarea:disabled {
   opacity: 0.4;
@@ -644,22 +660,26 @@ html, body {
   height: 36px;
   border-radius: 10px;
   border: none;
-  background: #10a37f;
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.25s ease;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 .send-btn:hover:not(:disabled) {
-  background: #0e8f6e;
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
 }
 .send-btn:disabled {
-  background: #3a3a3a;
-  color: #6b6b6b;
+  background: #cbd5e1;
+  color: #94a3b8;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .send-spinner {
@@ -677,7 +697,7 @@ html, body {
 .input-hint {
   text-align: center;
   font-size: 12px;
-  color: #6b6b6b;
+  color: #94a3b8;
   margin-top: 8px;
 }
 
