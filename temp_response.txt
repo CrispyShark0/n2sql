@@ -1,0 +1,1 @@
+﻿{"code":200,"message":"操作成功","data":[{"id":"ds-0c9d2c5f","name":"电商测试数据库","dbType":"MYSQL","host":"localhost","port":3306,"dbName":"n2sql_test","username":"root","password":"Zlj2004826","jdbcUrl":"jdbc:mysql://localhost:3306/n2sql_test?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"}]}

@@ -1,0 +1,26 @@
+{
+  "name": "n2sql-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.1",
+    "@vueuse/core": "^14.2.1",
+    "axios": "^1.6.7",
+    "echarts": "^6.0.0",
+    "element-plus": "^2.6.0",
+    "highlight.js": "^11.9.0",
+    "marked": "^17.0.4",
+    "vue": "^3.4.19",
+    "vue-echarts": "^8.0.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "vite": "^5.1.4"
+  }
+}

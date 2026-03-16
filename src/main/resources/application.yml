@@ -1,0 +1,20 @@
+# ========================================
+# 基于大模型的自然语言数据库查询系统 - 主配置
+# ========================================
+
+spring:
+  application:
+    name: n2sql
+  # 激活 dev 开发环境配置
+  profiles:
+    active: dev
+
+# 服务器配置
+server:
+  port: 8080
+
+# 日志配置：开发阶段多打印日志方便排查问题
+logging:
+  level:
+    root: INFO
+    com.itheima.n2sql: DEBUG
