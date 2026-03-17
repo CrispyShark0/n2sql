@@ -72,7 +72,7 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 
 <style scoped>
 .sidebar {
-  width: 260px; background: #f8f9fa; display: flex; flex-direction: column;
+  width: 260px; background: #E8EEF4; display: flex; flex-direction: column;
   border-right: 1px solid #e8eaed; transition: width 0.3s ease;
   position: relative; flex-shrink: 0;
 }

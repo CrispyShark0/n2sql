@@ -863,30 +863,38 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
   变量来源：schema 来自数据库自动扫描，question 来自用户输入原文。
   用户输入什么问题，就原封不动地填进去，不做任何"提取"或"理解"。
 
-**核心机制：**
+**核心机制（2026-03-18 改进版）：**
 
 1. @PostConstruct init() — 项目启动时自动调用
-   - 加载 base_nl2sql.txt（基础模板）和 correction_nl2sql.txt（纠错模板）
+   - 只加载2个模板：base_nl2sql.txt + correction_nl2sql.txt
    - 存入 HashMap 缓存，后续直接从内存读取（不用每次读文件）
+   - 旧的4个专用模板(simple/aggregate/multijoin/nested)不再加载
 
 2. loadTemplate(name, filePath) — 从 resources 目录加载模板文件
-   - 用 ClassPathResource 读取（ClassPath = resources 目录）
-   - 读出来的文本存入 templateCache
 
-3. buildNl2SqlPrompt(schemaDDL, question) — 构建基础提示词
-   - 从缓存取 "base_nl2sql" 模板
-   - 替换两个占位符：schema 和 question
-   - 返回完整提示词
+3. 【核心方法】buildSoftPrompt(schemaDDL, question, dbType, hints) — 软策略提示词
+   - 始终用 base_nl2sql 基础模板
+   - 把 hints 列表用 String.join("\n", hints) 拼成文本
+   - 替换3个占位符：{{schema}}、{{hints}}、{{question}}
+   - 如果 dbType 不为空，末尾追加方言提示
+   - hints 为空时 {{hints}} 被替换为空字符串（等于简单查询）
 
-4. buildCorrectionPrompt(schemaDDL, question, previousSql, errorMessage) — 构建纠错提示词
-   - 从缓存取 "correction_nl2sql" 模板
-   - 替换四个占位符：schema、question、previous_sql、error_message
-   - 比基础模板多了"上一轮的错误SQL"和"错误信息"
+4. 【核心方法】buildCorrectionPromptWithHistory(schemaDDL, question, correctionHistory) — 完整历史纠错
+   - 遍历 List<CorrectionRecord>，格式化为：
+     "### Attempt 1\nSQL:\n```sql\n...\n```\nError Type: SYNTAX_ERROR\nError Message: ...\n"
+   - 替换3个占位符：{{schema}}、{{question}}、{{error_history}}
+   - 大模型能看到所有之前的失败尝试，避免来回振荡犯同样的错
+
+**已删除的旧方法（2026-03-18）：**
+- buildNl2SqlPrompt() — 被 buildSoftPrompt() 替代
+- buildPromptByTemplateName() 两个重载 — 不再需要按模板名选模板
+- buildCorrectionPrompt() — 被 buildCorrectionPromptWithHistory() 替代
 
 **Review 检查：**
-- OK @PostConstruct 只在启动时加载一次，后续从内存读取，性能好
+- OK @PostConstruct 只在启动时加载一次，后续从内存读取
 - OK 模板和代码分离，修改提示词不需要改 Java 代码
-- OK 基础模板和纠错模板分开管理，职责清晰
+- OK buildSoftPrompt 的 hints 可为空，优雅降级
+- OK buildCorrectionPromptWithHistory 传入完整历史，按导师要求避免振荡
 
 ---
 
@@ -1036,135 +1044,169 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 **这个文件是干什么的？**
 
-整个项目最核心的文件！实现了从"用户说中文"到"返回数据库查询结果"的完整流程，并且带有自纠错反馈闭环。
+整个项目最核心的文件！实现了从"用户说中文"到"返回数据库查询结果"的完整流程，
+并且带有：软策略提示词、完整历史自纠错、NO_MATCH实体检测。
 
 **通俗比喻：** 就像一个"翻译+执行+检查"的全能助手：
-  1. 用户说中文 -> 翻译成 SQL
-  2. 检查 SQL 有没有语法错误
-  3. 去数据库执行
-  4. 如果出错了，把错误信息告诉翻译助手让他重新翻译
-  5. 最多重试3次
+  1. 用户说中文 -> 检测关键词生成补充指令(hints)
+  2. 用基础模板+hints翻译成SQL
+  3. 检查大模型是否说"这个东西数据库里不存在"(NO_MATCH)
+  4. 检查 SQL 有没有语法错误
+  5. 去数据库执行
+  6. 如果出错了，把所有历史错误信息告诉翻译助手让他重新翻译
+  7. 最多重试3次
 
-**注入了5个依赖：**
+**注入了6个依赖（2026-03-18 更新）：**
 - SchemaExtractService — 提取数据库结构
-- PromptTemplateService — 构建提示词
+- PromptTemplateService — 构建提示词（buildSoftPrompt + buildCorrectionPromptWithHistory）
 - ChatLanguageModel — 大模型客户端（调用 DeepSeek）
 - SqlExecuteService — 执行 SQL
 - SqlValidateService — 静态验证 SQL
+- QueryClassifier — 查询意图检测器（软策略版本，detectHints）
 
-**generateSql() 方法完整流程：**
+**generateSql() 方法完整流程（2026-03-18 改进版）：**
 
 第一步：提取数据库 Schema
   调用 schemaExtractService.extractSchema()
   把结果格式化为 DDL 文本（formatAsDDL()）
   这一步只做一次，后续纠错时复用同一份 Schema
 
-第二步：首次生成 SQL
-  用 buildNl2SqlPrompt() 构建基础提示词
-  调用 chatLanguageModel.generate(prompt) 发给大模型
-  用 SqlCleanUtil.cleanSql() 清洗返回文本
+第二步：【改进-软策略】检测查询关键词，生成补充指令
+  调用 queryClassifier.detectHints(question, schema)
+  返回 List<String> hints（可同时包含聚合+多表+嵌套等多种提示）
 
-第三步：进入验证-执行-纠错循环（最多 maxRetries+1 轮）
+第三步：【改进-软策略】构建带动态hints的提示词
+  调用 promptTemplateService.buildSoftPrompt(schemaDDL, question, dbType, hints)
+  始终用 base_nl2sql.txt 基础模板 + hints 动态注入
+
+第四步：调用大模型 + 清洗响应
+
+第五步：【新增-NO_MATCH检测】
+  调用 isNoMatch(rawResponse) 检查大模型是否返回 "NO_MATCH: 原因"
+  如果是 → extractNoMatchReason() 提取原因 → 直接返回友好错误提示
+  不进入验证/执行流程
+
+第六步：进入验证-执行-纠错循环（最多 maxRetries+1 轮）
 
   循环的每一轮做两件事：
 
   第一关：静态验证
     调用 sqlValidateService.validate(sql, schema)
     如果不通过（表名不存在、语法错误等）：
-      - 记录 CorrectionRecord（errorType = "SYNTAX_ERROR"）
-      - 如果还有重试次数，调用 requestCorrection() 让大模型修正
-      - continue 回到循环开头
+      - 记录 CorrectionRecord 到 correctionHistory
+      - 【改进】调用 requestCorrectionWithHistory() 传入完整历史
+      - 纠错后也检查 NO_MATCH
 
   第二关：数据库执行
     调用 sqlExecuteService.execute(dataSourceId, sql)
-    如果执行成功 -> 组装 Nl2SqlResponse 返回（success=true）
-    如果执行失败（列名不存在、类型不匹配等）：
-      - 记录 CorrectionRecord（errorType = "EXECUTION_ERROR"）
-      - 如果还有重试次数，调用 requestCorrection() 让大模型修正
+    成功 → 返回结果
+    失败：
+      - 记录 CorrectionRecord 到 correctionHistory
+      - 【改进】调用 requestCorrectionWithHistory() 传入完整历史
+      - 纠错后也检查 NO_MATCH
 
-  达到最大重试次数还没成功 -> 返回失败结果
+**requestCorrectionWithHistory() 私有方法（2026-03-18 改进）：**
+  按导师要求：每次重试时，把之前【所有】失败的 SQL 和对应的错误信息都传给大模型。
+  调用 promptTemplateService.buildCorrectionPromptWithHistory(schemaDDL, question, correctionHistory)
+  大模型能看到："第1次试了这个SQL，错在这里；第2次试了那个，也错了"
+  避免来回振荡犯同样的错误。
 
-**requestCorrection() 私有方法：**
-  纠错的核心！构建纠错提示词（包含上一轮的错误SQL和错误信息），
-  发给大模型，让它参考错误来修改 SQL。
-  就像你写代码报错了，看着报错信息去改一样。
+**isNoMatch() / extractNoMatchReason() 私有方法（2026-03-18 新增）：**
+  按导师要求：如果用户问了不存在的实体（如"查询学生"，但数据库只有员工表），
+  大模型应返回 "NO_MATCH: <原因>"，系统不应猜测。
+  isNoMatch() 检查文本是否以 "NO_MATCH" 开头。
+  extractNoMatchReason() 提取冒号后面的原因说明。
 
 **buildFailResponse() 私有方法：**
-  构建统一的失败响应，避免在多处重复写同样的代码。
-
-**这就是开题报告里说的"动静态校验两步"：**
-  静态校验 = SqlValidateService（本地语法+Schema检查，不连数据库）
-  动态校验 = SqlExecuteService（提交到数据库真实执行，看是否报错）
-  两步都有，并且形成了闭环（报错->反馈->重新生成->再验证）
+  构建统一的失败响应，避免重复代码。
 
 **Review 检查：**
-- OK 完整实现了自纠错反馈闭环
+- OK 完整实现了软策略+完整历史纠错+NO_MATCH三项导师改进要求
 - OK 静态验证在前、动态执行在后，减少无效的数据库查询
 - OK 纠错历史完整记录，前端可以展示每一轮的情况
+- OK NO_MATCH 在首次生成和每次纠错后都做检测，覆盖全面
 - OK 最外层有 try-catch 兜底，任何意外错误都不会导致系统崩溃
-- OK for 循环 + continue 实现重试逻辑，代码清晰
 
 ---
 
 ## 第九部分：提示词模板文件
 
-### 29. base_nl2sql.txt（基础 NL2SQL 提示词模板）
+### 29. base_nl2sql.txt（基础 NL2SQL 提示词模板 — 软策略核心模板）
 
 **路径：** resources/prompts/base_nl2sql.txt
 
 **这个文件是干什么的？**
 
 首次生成 SQL 时使用的提示词模板。用英文写（大模型处理英文更准确）。
+这是软策略的核心模板——所有类型的查询都用这一个模板，通过 {{hints}} 动态注入补充指令。
 
-**包含两个占位符变量：**
+**包含三个占位符变量（2026-03-18 更新）：**
 - {{schema}} — 被替换为数据库结构的 DDL 文本（来自 SchemaExtractService 扫描）
+- {{hints}} — 被替换为 QueryClassifier.detectHints() 返回的补充指令（可为空字符串）
 - {{question}} — 被替换为用户输入的原始自然语言问题
 
 **模板结构：**
 1. 角色设定："You are an expert SQL query generator"
 2. 数据库结构：{{schema}} 占位符
-3. 10条规则约束：
+3. 11条规则约束（比旧版多了第11条）：
    - 只生成 SELECT
    - 只用 Schema 中存在的表和列
    - 正确使用 JOIN、聚合函数、ORDER BY
    - 不要加解释、不要 Markdown 格式
-4. 用户问题：{{question}} 占位符
-5. 以 "SQL Query" 结尾，引导大模型直接输出 SQL
+   - 【新增】第11条：NO_MATCH 约束 — 如果用户问的实体在 Schema 中不存在，
+     不准猜测，必须返回 "NO_MATCH: <原因>"
+4. 动态补充指令：{{hints}} 占位符（软策略的关键！）
+5. 用户问题：{{question}} 占位符
+6. 以 "SQL Query" 结尾，引导大模型直接输出 SQL
+
+**{{hints}} 的动态注入机制：**
+  - 简单查询：hints 为空 → {{hints}} 被替换为空字符串 → 等于没有额外指令
+  - 聚合查询：hints = ["## Additional Hint: Aggregation Detected\n..."]
+  - 多表+聚合：hints = [聚合提示, 多表提示] → 两条同时生效
+  - 全部叠加：hints = [聚合提示, 多表提示, 嵌套提示] → 三条同时生效
 
 **Review 检查：**
 - OK 规则详细，约束了大模型的输出格式
-- OK 英文提示词效果比中文好（大模型训练数据英文居多）
-- OK 明确禁止了 DELETE/UPDATE/DROP 等危险操作
+- OK {{hints}} 实现了软策略，一个模板适应所有查询类型
+- OK NO_MATCH 规则防止大模型幻觉（如把"学生"猜成"员工"）
+- OK 英文提示词效果比中文好
 
 ---
 
-### 30. correction_nl2sql.txt（纠错提示词模板）
+### 30. correction_nl2sql.txt（纠错提示词模板 — 完整历史版）
 
 **路径：** resources/prompts/correction_nl2sql.txt
 
 **这个文件是干什么的？**
 
-当大模型生成的 SQL 有错（语法错误或执行报错）时，用这个模板构建纠错提示词。
+当大模型生成的 SQL 有错时，用这个模板构建纠错提示词。
+2026-03-18 按导师要求改为支持完整历史错误上下文。
 
-**包含四个占位符变量：**
+**包含三个占位符变量（2026-03-18 更新）：**
 - {{schema}} — 数据库结构 DDL（和首次一样）
-- {{previous_sql}} — 上一轮生成的错误 SQL
-- {{error_message}} — 错误信息（来自 JSQLParser 或数据库）
-- {{question}} — 用户的原始问题（大模型没有记忆，必须每次都传）
+- {{error_history}} — 【新】完整的错误历史（所有之前失败的SQL和错误信息）
+- {{question}} — 用户的原始问题
 
-**和 base_nl2sql.txt 的区别：**
-  多了 "Previous Attempt" 和 "Error Information" 两个部分。
-  告诉大模型："你上次写的 SQL 是这个，报了这个错，请修正"。
+**和旧版的区别：**
+  旧版：{{previous_sql}} + {{error_message}} — 只传最近一次的错误
+  新版：{{error_history}} — 传入所有历史错误，格式化为：
+    ### Attempt 1
+    SQL: SELECT * FROM student ...
+    Error Type: SYNTAX_ERROR
+    Error Message: 表 'student' 不存在
+    
+    ### Attempt 2
+    SQL: SELECT * FROM employees WHERE type='student' ...
+    Error Type: EXECUTION_ERROR
+    Error Message: 列 'type' 不存在
 
-**为什么每次都要传完整的 Schema 和 Question？**
-  大模型没有"记忆"！每次调用都是独立的。
-  它不记得上次你问过什么、数据库长什么样。
-  所以每次纠错都必须把完整上下文重新传一遍。
+**模板规则包含 NO_MATCH 约束：**
+  第9条规则和 base_nl2sql.txt 的第11条一样，纠错过程中也不允许猜测。
 
 **Review 检查：**
-- OK 结构清晰：Schema -> 上次的SQL -> 错误信息 -> 规则 -> 原始问题
-- OK 第一条规则强调"仔细分析错误信息再修正"
-- OK 包含了修正表名/列名的专门规则（第4条）
+- OK 完整历史让大模型看到所有之前的尝试，避免来回振荡
+- OK "Do NOT repeat any of the previously failed SQL statements" 明确禁止重复
+- OK 包含 NO_MATCH 约束，纠错过程中也能"醒悟"实体不存在
 
 ---
 
@@ -1288,46 +1330,52 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ---
 
-### 34. QueryClassifier.java（查询意图分类器）
+### 34. QueryClassifier.java（查询意图检测器 — 软策略版）
 
 **路径：** service/QueryClassifier.java
 
 **这个文件是干什么的？**
 
-分析用户的自然语言问题，判断属于哪种查询类型。使用关键词匹配（不调用大模型），速度快、免费、可控。
+分析用户的自然语言问题，检测其中包含的查询特征，返回补充指令列表。
+使用关键词匹配（不调用大模型），速度快、免费、可控。
 
-**分类优先级：** NESTED > AGGREGATE > MULTI_JOIN > SIMPLE
+**2026-03-18 重大改造：从硬分类改为软策略**
 
-**三组关键词：**
-- 嵌套关键词：排名、前N、环比、同比、高于平均、不在、占比...
-- 聚合关键词：多少、总数、平均、最大、最小、分组、每个...
-- 联查关键词：的订单、的产品、购买了、及其、对应的...
+旧方案：`classify(question, schema)` → 返回 QueryType 枚举（互斥四选一）
+新方案：`detectHints(question, schema)` → 返回 `List<String>`（可同时叠加多种提示）
 
-**智能组合：** 如果同时命中聚合+多表 → 自动升级为 NESTED（最复杂的模板）
+**三组关键词检测（可同时命中）：**
+- 聚合关键词：多少、总数、平均、最大、最小、分组、每个、统计、最高、最低...
+- 联查关键词：的订单、的产品、购买了、及其、对应的... + mentionsMultipleTables()
+- 嵌套关键词：排名、前N、环比、同比、高于平均、每个.*最... (正则支持)
 
-**Schema 辅助判断：** 如果问题中提到了2张以上表的名字或注释，判定为多表联查
+**举例场景：**
+- "查询所有年龄大于30的员工" → hints=[] (空，基础模板够用)
+- "统计每个部门的平均工资" → hints=[AGGREGATE_HINT]
+- "查找订单金额超过10000的客户" → hints=[MULTI_JOIN_HINT]
+- "查询销售额最高的产品类别及最好的产品" → hints=[AGGREGATE_HINT, MULTI_JOIN_HINT]
+- "查询每个部门薪资最高的员工" → hints=[AGGREGATE_HINT, MULTI_JOIN_HINT, NESTED_HINT]
+
+**核心方法：**
+- `detectHints(question, schema)` — 主入口，返回补充指令列表
+- `matchesAny(question, keywords)` — 正则+包含双模式匹配
+- `mentionsMultipleTables(question, schema)` — 从Schema表名/注释判断是否提到2+张表
 
 **Review 检查：**
 - OK 不依赖大模型，零额外开销
-- OK 正则+包含匹配都支持
-- OK Schema辅助判断提高了准确性
+- OK 软策略避免了硬分类误判的问题
+- OK 多种提示可同时叠加，处理复杂查询更准确
+- OK Schema辅助判断提高了多表检测的准确性
 
 ---
 
-### 35-38. 四套专用提示词模板
+### 35-38. 四套专用提示词模板（已废弃，保留文件供参考）
 
-**路径：** resources/prompts/ 下新增4个文件
+**路径：** resources/prompts/ 下的 simple/aggregate/multijoin/nested 四个文件
 
-每种查询类型都有针对性的规则强调：
-
-- **simple_nl2sql.txt** — 强调"单表、简单WHERE、不要用JOIN"
-- **aggregate_nl2sql.txt** — 强调"聚合函数、GROUP BY、HAVING、有意义的别名"
-- **multijoin_nl2sql.txt** — 强调"JOIN、外键关系、表别名、列名限定"
-- **nested_nl2sql.txt** — 强调"ROW_NUMBER窗口函数、子查询、NOT EXISTS、RANK"
-
-**Review 检查：**
-- OK 每种模板的规则都针对其查询类型做了专门优化
-- OK 都保留了通用安全规则（只许SELECT、不许修改数据）
+2026-03-18 按导师反馈改为软策略后，这四套模板不再被代码加载和使用。
+所有查询统一使用 base_nl2sql.txt + {{hints}} 动态注入。
+文件保留在 resources/prompts/ 目录下供历史参考。
 
 ---
 
@@ -1363,21 +1411,28 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ## 最终 Review 总结（更新）
 
-**项目当前状态：六个阶段全部完成 + 前端改版 + Bug修复，编译零错误。**
+**项目当前状态：六个阶段全部完成 + 导师反馈改进 + Gemini风格前端 + Bug修复，编译零错误。**
 
 **已完成的全部功能：**
-1. 基础架构 — 动态数据源管理、连接池、Schema自动扫描
+1. 基础架构 — 动态数据源管理、连接池、Schema自动扫描(含字段类型+注释)
 2. LLM对接 — DeepSeek大模型调用、提示词模板
-3. 自纠错 — 静态验证(语法+Schema) + 动态验证(数据库执行) + 反馈闭环(最多3次)
-4. 复杂SQL — 查询意图分类 + 4套专用提示词模板 + 动态路由
+3. 自纠错 — 静态验证(语法+Schema+Levenshtein) + 动态验证(数据库执行) + 反馈闭环(最多3次)
+4. ~~复杂SQL — 查询意图分类 + 4套专用提示词模板~~ → 已被软策略替代
 5. 多方言 — 自动检测数据库类型 + 方言提示注入
-6. REST API — 6个HTTP接口，可用Postman测试
-7. 前端界面 — Vue 3 + Vite，蓝白科技风，ChatGPT风格交互
+6. REST API — 6个HTTP接口
+7. 前端界面 — Vue 3 + Vite，Gemini 风格交互
 8. Bug修复 — 复杂嵌套查询静态校验误判问题已修复
+9. 【新增】软策略 — 基础模板兜底 + 动态追加补充指令（替代硬分类）
+10. 【新增】完整历史纠错 — 重试时传入所有失败记录（避免来回振荡）
+11. 【新增】NO_MATCH机制 — 不存在的实体不猜测，返回明确拒绝
 
-**2026-03-16 更新内容：**
-- 修复 SqlValidateService 对复杂嵌套SQL的静态校验误判
-- 前端从深色主题改为蓝白科技风（Blue-White Tech Theme）
+**2026-03-18 更新内容（按导师反馈）：**
+- QueryClassifier 从硬分类(classify→QueryType)改为软检测(detectHints→List<String>)
+- PromptTemplateService 精简为2个核心方法(buildSoftPrompt + buildCorrectionPromptWithHistory)
+- base_nl2sql.txt 新增 {{hints}} 占位符 + 第11条 NO_MATCH 规则
+- correction_nl2sql.txt 改用 {{error_history}} 占位符，支持完整历史
+- Nl2SqlService 整合软策略+完整历史+NO_MATCH三项改进
+- 前端从蓝白科技风改为 Gemini 风格（纯白背景+Google蓝+胶囊按钮）
 
 **下一步：**
 - 第七阶段：用 Spider/BIRD 测试集量化准确率
@@ -1439,60 +1494,72 @@ frontend/
 
 整个应用的根组件，包含：
 - **布局**：左侧 Sidebar + 右侧主区域（flex 布局）
-- **欢迎屏**：当无消息时显示，含4个示例查询卡片和系统能力说明
-- **消息区**：ChatGPT 风格的对话列表，用户消息和AI响应交替显示
-- **输入区**：底部固定输入框，支持 Enter 发送、Shift+Enter 换行、自动调高
+- **顶栏**：左侧品牌标识 + 右侧连接状态pill（Gemini风格）
+- **欢迎屏**：当无消息时显示，含蓝色渐变图标、问候语、4个胶囊chip示例、技术标签
+- **消息区**：Gemini 风格对话列表，用户消息和AI响应交替显示
+- **输入区**：底部胶囊圆角(28px)输入框，圆形发送按钮，支持Enter发送/Shift+Enter换行
 - **数据源弹窗**：点击侧边栏的 + 按钮弹出
 
 核心逻辑：
 - `sendMessage()` — 发送问题 → 调用 `/api/nl2sql` → 解析响应 → 展示结果
-- `tryExample(text)` — 点击示例卡片自动填入并发送
+- `tryExample(text)` — 点击示例chip自动填入并发送
 - `loadDataSources()` — 页面加载时获取数据源列表
 
 ### 43. Sidebar.vue（侧边栏组件）
 
-深蓝渐变背景的侧边栏，包含：
-- **品牌标识**：⚡ NL2SQL
-- **New Chat 按钮**：清空对话
-- **DATA SOURCES 列表**：显示所有已注册数据源，支持选择/删除
+浅灰白(#f8f9fa)背景的侧边栏（Gemini风格），包含：
+- **品牌标识**：蓝色方形SVG图标 + NL2SQL 文字
+- **New Chat 按钮**：胶囊pill形，白底灰边
+- **DATA SOURCES 列表**：显示所有已注册数据源，选中项蓝色背景(#e8f0fe)
 - **折叠功能**：可收起侧边栏释放主区域空间
-- **底部标识**：Powered by DeepSeek
+- **底部标识**：Powered by DeepSeek LLM
 
 ### 44. ChatMessage.vue（消息组件）
 
 根据消息类型（user/ai）渲染不同内容：
-- **用户消息**：简单文本 + 紫色头像
+- **用户消息**：简单文本 + 灰色圆形头像(👤)
 - **AI 消息**：
-  - 错误提示（红色区块）
-  - SQL 代码块（深蓝头部 + 语法高亮 + 复制按钮）
-  - 查询结果表格（白色背景 + 蓝色边框，支持展开/收起）
-  - 自纠错提示（黄色，显示重试次数）
+  - 错误提示（Google红 #fce8e6 区块）
+  - SQL 代码块（深灰头部#202124 + 语法高亮 + 复制按钮）
+  - 查询结果表格（白色背景 + 灰色边框，行数badge为蓝色pill）
+  - 自纠错提示（橙色#e37400，显示重试次数）
   - 执行耗时元信息
-
-SQL 语法高亮使用 highlight.js 的 `atom-one-dark` 主题（SQL块背景为深色，形成对比）。
+- **AI头像**：✦ 星形符号 + 蓝色渐变圆形背景
 
 ### 45. DataSourceModal.vue（数据源弹窗）
 
-Teleport 到 body 的模态弹窗，包含：
+Teleport 到 body 的模态弹窗（Gemini风格），包含：
 - **表单字段**：连接名称、数据库类型（MySQL/PostgreSQL）、主机、端口、数据库名、用户名、密码
-- **测试连接按钮**：调用后端 `/api/datasource/test`，显示成功/失败结果
-- **保存按钮**：调用后端 `/api/datasource` 创建数据源
+- **输入框**：白底+灰边框，聚焦时蓝边+蓝色阴影
+- **测试连接按钮**：pill形灰色次要按钮
+- **保存按钮**：pill形 Google蓝主按钮
+- **结果提示**：成功绿(#e6f4ea) / 失败红(#fce8e6)
 
-### 前端配色方案（2026-03-16 蓝白科技风改版）
+### 前端配色方案（2026-03-18 Gemini 风格改版 — 第二版）
 
 | 元素 | 色值 | 说明 |
 |------|------|------|
-| 主背景 | #f0f4f8 → #e8eef6 | 淡灰蓝渐变 |
-| 侧边栏 | #1e3a5f → #152d4a | 深蓝渐变 |
-| 主色/按钮 | #3b82f6 → #2563eb | 蓝色渐变 |
-| 文字主色 | #1e293b | 深灰 |
-| 次要文字 | #64748b | 中灰 |
-| SQL块头 | #1e3a5f → #1e40af | 深蓝渐变 |
-| SQL代码 | #0f172a | 深海蓝（保持深色对比） |
-| 表格/弹窗 | #ffffff | 纯白 |
-| 连接状态点 | #3b82f6 + 蓝色光晕 | 蓝色脉冲 |
-| 头像（用户） | #6366f1 → #818cf8 | 紫色渐变 |
-| 头像（AI） | #3b82f6 → #60a5fa | 蓝色渐变 |
+| 主背景 | #ffffff | 纯白 |
+| 侧边栏 | #f8f9fa | 浅灰白 |
+| 主色/按钮 | #1a73e8 | Google蓝 |
+| 悬停色 | #1557b0 | 深Google蓝 |
+| 文字主色 | #1f1f1f | 纯黑 |
+| 次要文字 | #5f6368 | Google灰 |
+| 边框色 | #e8eaed / #dadce0 | Google边框灰 |
+| 背景色(hover) | #f1f3f4 | Google悬浮灰 |
+| SQL块头 | #202124 | Google深灰 |
+| SQL代码 | #292a2d | 略浅深灰 |
+| 表格头 | #f1f3f4 | 浅灰 |
+| 错误提示 | #fce8e6 + #c5221f | Google红 |
+| 成功提示 | #e6f4ea + #137333 | Google绿 |
+| 连接状态 | #34a853 | Google绿(LED常亮) |
+| 高亮蓝背景 | #e8f0fe | Google蓝浅底 |
+| AI头像 | #4285f4→#669df6 渐变 | 圆形+✦星形 |
+| 用户头像 | #e8eaed | 灰色圆形+👤 |
+| 输入框 | #f8f9fa → 聚焦白+蓝边 | 胶囊28px |
+| 发送按钮 | #1a73e8 | 圆形50% |
+| 示例chip | 白底+灰边框 | 胶囊100px横排 |
+| 纠错提示 | #e37400 | 橙色 |
 
 **Review 检查：**
 - OK Composition API (setup) 使用规范
@@ -1501,4 +1568,5 @@ Teleport 到 body 的模态弹窗，包含：
 - OK 组件拆分合理（Sidebar/ChatMessage/DataSourceModal）
 - OK SQL 语法高亮提升了代码可读性
 - OK 错误处理完善（网络错误/业务错误都有展示）
+- OK Gemini 风格简洁专业，纯白背景视觉干净
 
