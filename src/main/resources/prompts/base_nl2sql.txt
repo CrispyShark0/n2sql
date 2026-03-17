@@ -16,6 +16,9 @@ The database structure is as follows:
 8. If the question is ambiguous, make the most reasonable interpretation based on the schema.
 9. Do NOT use DELETE, UPDATE, INSERT, DROP, ALTER, or any data-modifying statements.
 10. Output the raw SQL only — no ```sql``` blocks, no explanation, no extra text.
+11. IMPORTANT: If the user's question refers to entities, tables, or concepts that do NOT exist anywhere in the provided schema (e.g., asking about "students" when the schema only has "employees"), do NOT guess or fabricate SQL. Instead, output exactly: NO_MATCH: <reason>, where <reason> briefly explains which entity was not found in the schema. Never assume one entity means another.
+
+{{hints}}
 
 ## User Question
 {{question}}

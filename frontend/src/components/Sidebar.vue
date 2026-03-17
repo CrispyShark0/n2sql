@@ -1,16 +1,13 @@
 <template>
-  <div class="sidebar" :class="{ collapsed: collapsed }">
-    <!-- Toggle Button (visible when collapsed) -->
+  <div class="sidebar" :class="{ collapsed }">
     <button v-if="collapsed" class="sidebar-toggle-open" @click="$emit('toggle')">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     </button>
-
-    <!-- Sidebar Content -->
     <div v-show="!collapsed" class="sidebar-inner">
       <!-- Header -->
       <div class="sidebar-header">
         <div class="brand">
-          <div class="brand-icon">⚡</div>
+          <svg width="22" height="22" viewBox="0 0 48 48" fill="none"><rect width="48" height="48" rx="12" fill="#1a73e8"/><path d="M16 24h16M24 16v16" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
           <span class="brand-text">NL2SQL</span>
         </div>
         <button class="sidebar-close" @click="$emit('toggle')">
@@ -18,15 +15,14 @@
         </button>
       </div>
 
-      <!-- New Chat Button -->
+      <!-- New Chat -->
       <button class="new-chat-btn" @click="$emit('newChat')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New Chat
       </button>
 
-      <!-- Data Sources Section -->
+      <!-- Data Sources -->
       <div class="section-title">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
         DATA SOURCES
         <button class="add-ds-btn" @click="$emit('addDataSource')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -35,13 +31,11 @@
 
       <div class="ds-list">
         <div
-          v-for="ds in dataSources"
-          :key="ds.id"
-          class="ds-item"
-          :class="{ active: currentId === ds.id }"
+          v-for="ds in dataSources" :key="ds.id"
+          class="ds-item" :class="{ active: currentId === ds.id }"
           @click="$emit('select', ds.id)"
         >
-          <div class="ds-item-icon" :class="ds.dbType?.toLowerCase()">
+          <div class="ds-item-icon">
             <span v-if="ds.dbType === 'MYSQL'">🐬</span>
             <span v-else-if="ds.dbType === 'POSTGRESQL'">🐘</span>
             <span v-else>💾</span>
@@ -60,12 +54,8 @@
         </div>
       </div>
 
-      <!-- Footer -->
       <div class="sidebar-footer">
-        <div class="footer-info">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          Powered by DeepSeek
-        </div>
+        Powered by DeepSeek LLM
       </div>
     </div>
   </div>
@@ -77,235 +67,92 @@ defineProps({
   currentId: { type: String, default: '' },
   collapsed: { type: Boolean, default: false }
 })
-
 defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat'])
 </script>
 
 <style scoped>
 .sidebar {
-  width: 260px;
-  background: linear-gradient(180deg, #1e3a5f 0%, #152d4a 100%);
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid rgba(59, 130, 246, 0.15);
-  transition: width 0.3s ease;
-  position: relative;
-  flex-shrink: 0;
+  width: 260px; background: #f8f9fa; display: flex; flex-direction: column;
+  border-right: 1px solid #e8eaed; transition: width 0.3s ease;
+  position: relative; flex-shrink: 0;
 }
-.sidebar.collapsed {
-  width: 0;
-  border-right: none;
-  overflow: hidden;
-}
+.sidebar.collapsed { width: 0; border-right: none; overflow: hidden; }
 
 .sidebar-toggle-open {
-  position: absolute;
-  top: 16px;
-  left: 8px;
-  z-index: 100;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  position: absolute; top: 12px; left: 8px; z-index: 100;
+  background: #fff; border: 1px solid #e8eaed; color: #5f6368;
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
-.sidebar-toggle-open:hover {
-  background: #fff;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
-}
+.sidebar-toggle-open:hover { background: #f1f3f4; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
 
-.sidebar-inner {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 12px;
-}
+.sidebar-inner { display: flex; flex-direction: column; height: 100%; padding: 12px; }
 
 .sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 4px 0 16px;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.brand-icon {
-  font-size: 22px;
-  filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.5));
-}
-.brand-text {
-  font-size: 17px;
-  font-weight: 700;
-  color: #e2e8f0;
-  letter-spacing: -0.5px;
-}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand svg { width: 22px; height: 22px; }
+.brand-text { font-size: 16px; font-weight: 600; color: #1f1f1f; }
 .sidebar-close {
-  background: none;
-  border: none;
-  color: rgba(148, 163, 184, 0.6);
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
+  background: none; border: none; color: #9aa0a6; cursor: pointer;
+  padding: 6px; border-radius: 50%; display: flex; align-items: center;
   transition: all 0.2s;
 }
-.sidebar-close:hover {
-  background: rgba(255,255,255,0.08);
-  color: #93c5fd;
-}
+.sidebar-close:hover { background: #e8eaed; color: #5f6368; }
 
 .new-chat-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px;
-  border: 1px solid rgba(96, 165, 250, 0.25);
-  border-radius: 10px;
-  background: rgba(59, 130, 246, 0.1);
-  color: #93c5fd;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-bottom: 20px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 10px; border: 1px solid #dadce0;
+  border-radius: 100px; background: #fff; color: #1f1f1f;
+  font-size: 14px; cursor: pointer; transition: all 0.2s; margin-bottom: 20px;
+  font-family: inherit;
 }
-.new-chat-btn:hover {
-  background: rgba(59, 130, 246, 0.2);
-  border-color: rgba(96, 165, 250, 0.4);
-  color: #bfdbfe;
-}
+.new-chat-btn:hover { background: #e8eaed; border-color: #bdc1c6; }
 
 .section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(148, 163, 184, 0.6);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  padding: 0 4px;
-  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; color: #9aa0a6;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  padding: 0 4px; margin-bottom: 8px;
 }
 .add-ds-btn {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: rgba(148, 163, 184, 0.6);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s;
+  margin-left: auto; background: none; border: none; color: #9aa0a6;
+  cursor: pointer; padding: 4px; border-radius: 50%;
+  display: flex; align-items: center; transition: all 0.2s;
 }
-.add-ds-btn:hover {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.15);
-}
+.add-ds-btn:hover { color: #1a73e8; background: #e8f0fe; }
 
-.ds-list {
-  flex: 1;
-  overflow-y: auto;
-}
+.ds-list { flex: 1; overflow-y: auto; }
 .ds-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.15s;
-  margin-bottom: 2px;
-  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 12px; cursor: pointer;
+  transition: all 0.15s; margin-bottom: 2px; position: relative;
 }
-.ds-item:hover {
-  background: rgba(59, 130, 246, 0.1);
-}
-.ds-item.active {
-  background: rgba(59, 130, 246, 0.2);
-  border: 1px solid rgba(96, 165, 250, 0.2);
-}
-.ds-item-icon {
-  font-size: 20px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-.ds-item-info {
-  flex: 1;
-  min-width: 0;
-}
+.ds-item:hover { background: #e8eaed; }
+.ds-item.active { background: #e8f0fe; }
+.ds-item-icon { font-size: 18px; width: 28px; text-align: center; flex-shrink: 0; }
+.ds-item-info { flex: 1; min-width: 0; }
 .ds-item-name {
-  font-size: 14px;
-  color: #e2e8f0;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 14px; color: #1f1f1f; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.ds-item-type {
-  font-size: 11px;
-  color: rgba(148, 163, 184, 0.6);
-  margin-top: 1px;
-}
+.ds-item-type { font-size: 11px; color: #9aa0a6; margin-top: 1px; }
 .ds-delete-btn {
-  opacity: 0;
-  background: none;
-  border: none;
-  color: rgba(148, 163, 184, 0.6);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  transition: all 0.2s;
+  opacity: 0; background: none; border: none; color: #9aa0a6;
+  cursor: pointer; padding: 4px; border-radius: 50%;
+  display: flex; align-items: center; transition: all 0.2s;
 }
-.ds-item:hover .ds-delete-btn {
-  opacity: 1;
-}
-.ds-delete-btn:hover {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
-}
+.ds-item:hover .ds-delete-btn { opacity: 1; }
+.ds-delete-btn:hover { color: #d93025; background: #fce8e6; }
 
-.empty-ds {
-  text-align: center;
-  padding: 30px 10px;
-  color: rgba(148, 163, 184, 0.4);
-  font-size: 13px;
-}
-.empty-ds .hint {
-  color: rgba(148, 163, 184, 0.3);
-  font-size: 12px;
-}
+.empty-ds { text-align: center; padding: 30px 10px; color: #9aa0a6; font-size: 13px; }
+.empty-ds .hint { font-size: 12px; color: #bdc1c6; }
 
 .sidebar-footer {
-  padding: 12px 4px;
-  border-top: 1px solid rgba(96, 165, 250, 0.1);
-  margin-top: auto;
-}
-.footer-info {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: rgba(148, 163, 184, 0.4);
+  padding: 12px 4px; border-top: 1px solid #e8eaed; margin-top: auto;
+  font-size: 12px; color: #9aa0a6; text-align: center;
 }
 </style>

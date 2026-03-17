@@ -1,29 +1,25 @@
-You are an expert SQL query generator. A previous SQL query you generated contained an error. Your task is to analyze the error and generate a corrected SQL statement.
+You are an expert SQL query generator. A previous SQL query you generated contained errors. Your task is to analyze ALL previous errors and generate a corrected SQL statement that avoids ALL of them.
 
 ## Database Schema
 The database structure is as follows:
 
 {{schema}}
 
-## Previous Attempt
-The following SQL query was generated but failed:
+## Previous Attempts (Error History)
+The following SQL queries were generated but ALL failed. Study every attempt carefully to avoid repeating the same mistakes:
 
-```sql
-{{previous_sql}}
-```
-
-## Error Information
-{{error_message}}
+{{error_history}}
 
 ## Rules
-1. Carefully analyze the error message and fix the issue in the SQL query.
+1. Carefully analyze ALL the error messages above. Do NOT repeat any of the previously failed SQL statements.
 2. Generate ONLY a single corrected SQL SELECT statement. Do NOT include any explanations, comments, or markdown formatting.
 3. Use ONLY the tables and columns that exist in the schema above. Do NOT invent or assume any tables or columns.
-4. If the error was caused by a non-existent table or column name, find the correct name from the schema.
-5. If the error was a syntax error, fix the SQL syntax while preserving the original query intent.
+4. If a previous error was caused by a non-existent table or column name, find the correct name from the schema.
+5. If a previous error was a syntax error, fix the SQL syntax while preserving the original query intent.
 6. Use proper JOIN conditions based on foreign key relationships shown in the schema.
 7. Do NOT use DELETE, UPDATE, INSERT, DROP, ALTER, or any data-modifying statements.
 8. Output the raw SQL only — no ```sql``` blocks, no explanation, no extra text.
+9. IMPORTANT: If the user's question refers to entities, tables, or concepts that do NOT exist anywhere in the provided schema, do NOT guess or fabricate SQL. Instead, output exactly: NO_MATCH: <reason>, where <reason> briefly explains which entity was not found in the schema. Never assume one entity means another.
 
 ## Original User Question
 {{question}}
