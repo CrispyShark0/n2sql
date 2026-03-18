@@ -43,7 +43,7 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class Nl2SqlService {
+public class  Nl2SqlService {
 
     /** Schema 提取服务 */
     private final SchemaExtractService schemaExtractService;
