@@ -765,7 +765,8 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
    - 生成唯一ID：ds- + 8位UUID（如 "ds-a1b2c3d4"）
    - 如果用户没填端口，用 DbType 的默认端口
    - 用 Builder 模式创建 DataSourceInfo
-   - 存入内存 Map + 注册连接池
+   - **先注册连接池**（try-catch 包裹），成功后才存入内存 Map
+   - 如果连接池初始化失败（数据库名错误、密码错误等），抛出 BizException 友好提示
    - 返回创建好的数据源信息
 
 2. listAll()
@@ -1210,25 +1211,20 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ---
 
-## Review 总结
+## Review 总结（阶段性）
 
-**所有 30 个文件/模块检查完毕。**
+**第1~30个文件/模块检查完毕，覆盖了后端核心逻辑。**
 
 **整体评价：**
-- 项目结构清晰，分层合理（config/model/service/exception/util）
-- 三个阶段功能完整：基础架构 + LLM对接 + 自纠错
+- 项目结构清晰，分层合理（config/model/service/exception/util/controller）
+- 核心链路完整：基础架构 + LLM对接 + 自纠错 + 软策略 + 多方言 + REST API
 - 代码注释详细，可读性好
 - 编译零错误
 
 **当前系统已具备的完整链路：**
-  用户说中文 -> 扫描数据库结构 -> 构建提示词 -> 调用大模型生成SQL
-  -> 静态验证（语法+Schema） -> 数据库执行 -> 自动纠错（最多3次）-> 返回结果
-
-**缺少的部分（不影响核心功能）：**
-- Controller 层（HTTP 接口，第六阶段）
-- 复杂SQL优化（提示词路由，第四阶段）
-- 多数据库方言适配（第五阶段）
-- 量化评测（Spider/BIRD 测试集，第七阶段）
+  用户说中文 -> 扫描数据库结构 -> 检测查询关键词(hints) -> 构建提示词
+  -> 调用大模型生成SQL -> NO_MATCH检测 -> 静态验证（语法+Schema+Levenshtein建议）
+  -> 数据库执行 -> 完整历史自纠错（最多3次）-> 返回结果 + 图表可视化
 
 ---
 
@@ -1245,7 +1241,7 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 **通俗比喻：** Service 是厨师做菜，Controller 是服务员接单、传菜。
 服务员不做菜，只负责：接收点单 -> 告诉厨师 -> 把做好的菜端给客人。
 
-**提供5个接口：**
+**提供6个接口（2026-03-23 新增Schema接口）：**
 
 | 方法 | 路径 | 功能 |
 |------|------|------|
@@ -1253,6 +1249,7 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 | GET | /api/datasource | 获取所有数据源 |
 | GET | /api/datasource/{id} | 根据ID获取 |
 | DELETE | /api/datasource/{id} | 删除数据源 |
+| GET | /api/datasource/{id}/schema | 获取数据库Schema结构（新增） |
 | POST | /api/datasource/test | 测试连接 |
 
 **关键注解讲解：**
@@ -1306,27 +1303,13 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ## 第十一部分：第四阶段新增 — 查询意图分类与动态路由
 
-### 33. QueryType.java（查询意图类型枚举）
+### 33. QueryType.java（查询意图类型枚举 — ⚠️ 已弃用）
 
 **路径：** model/enums/QueryType.java
 
-**这个文件是干什么的？**
-
-定义四种查询类型，每种类型对应一个专用提示词模板。
-就像医院分诊：感冒去内科、骨折去外科，不同问题分给不同的"专科模板"处理。
-
-**四种类型：**
-
-| 类型 | 模板名 | 适用场景举例 |
-|------|--------|-------------|
-| SIMPLE | simple_nl2sql | "查询所有用户"、"找出年龄大于25的" |
-| AGGREGATE | aggregate_nl2sql | "统计每个部门人数"、"平均薪资" |
-| MULTI_JOIN | multijoin_nl2sql | "用户及其订单"、"客户购买的产品" |
-| NESTED | nested_nl2sql | "每个部门薪资最高的"、"排名前3" |
-
-**Review 检查：**
-- OK 四种分类覆盖了常见的SQL查询场景
-- OK 每种类型直接关联模板名，方便路由
+**状态：** 2026-03-18 改为软策略后，此枚举不再被核心流程使用。
+QueryClassifier 现在通过 `detectHints()` 返回 `List<String>` 补充指令列表，不再依赖 QueryType 做互斥分类。
+文件保留在代码中供历史参考。
 
 ---
 
@@ -1369,13 +1352,10 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ---
 
-### 35-38. 四套专用提示词模板（已废弃，保留文件供参考）
+### 35-38. 四套专用提示词模板（已删除）
 
-**路径：** resources/prompts/ 下的 simple/aggregate/multijoin/nested 四个文件
-
-2026-03-18 按导师反馈改为软策略后，这四套模板不再被代码加载和使用。
+2026-03-18 按导师反馈改为软策略后，这四套模板（simple/aggregate/multijoin/nested）已从项目中删除。
 所有查询统一使用 base_nl2sql.txt + {{hints}} 动态注入。
-文件保留在 resources/prompts/ 目录下供历史参考。
 
 ---
 
@@ -1409,164 +1389,151 @@ Service 层是整个项目的"大脑"，所有核心业务逻辑都在这里。
 
 ---
 
-## 最终 Review 总结（更新）
+## 最终 Review 总结（2026-03-24 更新）
 
-**项目当前状态：六个阶段全部完成 + 导师反馈改进 + Gemini风格前端 + Bug修复，编译零错误。**
+**项目状态：全部开发完成，进入论文撰写阶段。编译零错误，测试全通过。**
 
-**已完成的全部功能：**
-1. 基础架构 — 动态数据源管理、连接池、Schema自动扫描(含字段类型+注释)
-2. LLM对接 — DeepSeek大模型调用、提示词模板
-3. 自纠错 — 静态验证(语法+Schema+Levenshtein) + 动态验证(数据库执行) + 反馈闭环(最多3次)
-4. ~~复杂SQL — 查询意图分类 + 4套专用提示词模板~~ → 已被软策略替代
+**后端已完成功能（Java 17 + Spring Boot 3.2.5）：**
+1. 基础架构 — 动态数据源管理(HikariCP)、Schema自动扫描(含字段类型+注释+外键)
+2. LLM对接 — DeepSeek大模型调用(LangChain4j)、提示词模板管理
+3. 自纠错 — 静态验证(JSQLParser语法+Schema表名列名+Levenshtein建议) + 动态验证(数据库执行) + 完整历史反馈闭环(最多3次)
+4. 软策略 — 基础模板兜底 + QueryClassifier.detectHints() 动态追加补充指令
 5. 多方言 — 自动检测数据库类型 + 方言提示注入
-6. REST API — 6个HTTP接口
-7. 前端界面 — Vue 3 + Vite，Gemini 风格交互
-8. Bug修复 — 复杂嵌套查询静态校验误判问题已修复
-9. 【新增】软策略 — 基础模板兜底 + 动态追加补充指令（替代硬分类）
-10. 【新增】完整历史纠错 — 重试时传入所有失败记录（避免来回振荡）
-11. 【新增】NO_MATCH机制 — 不存在的实体不猜测，返回明确拒绝
+6. NO_MATCH — 不存在的实体不猜测，返回明确拒绝
+7. REST API — DataSourceController(6个) + Nl2SqlController(1个) + DebugController(4个)
+8. Schema API — GET /api/datasource/{id}/schema 返回结构化Schema JSON
+9. 数据源连接保护 — 创建数据源时先注册连接池再存内存，连接失败返回友好提示
+10. 安全限制 — 只允许SELECT、超时30s、最大1000行
 
-**2026-03-18 更新内容（按导师反馈）：**
-- QueryClassifier 从硬分类(classify→QueryType)改为软检测(detectHints→List<String>)
-- PromptTemplateService 精简为2个核心方法(buildSoftPrompt + buildCorrectionPromptWithHistory)
-- base_nl2sql.txt 新增 {{hints}} 占位符 + 第11条 NO_MATCH 规则
-- correction_nl2sql.txt 改用 {{error_history}} 占位符，支持完整历史
-- Nl2SqlService 整合软策略+完整历史+NO_MATCH三项改进
-- 前端从蓝白科技风改为 Gemini 风格（纯白背景+Google蓝+胶囊按钮）
+**前端已完成功能（Vue 3.4 + Vite 5）：**
+1. Gemini风格界面 — 纯白+Google蓝配色
+2. 聊天历史 — 多会话管理，侧边栏切换/删除
+3. Schema预览 — 右侧抽屉面板，结构化展示表/列/主键/外键
+4. 图表可视化 — ECharts智能分析数据 → 柱状图/折线图/饼图自动切换
+5. API拦截器 — 正确处理后端统一响应格式(ApiResult)
 
-**下一步：**
-- 第七阶段：用 Spider/BIRD 测试集量化准确率
+**测试结果：**
+- test_v2.js 精确验证 27/27 通过（结果正确性对比标准答案）
+- test_v3.js 校验机制专项 28/28 通过（静态校验 + 动态执行 + 多轮纠错流水线）
 
 ---
 
-## 第十三部分：前端界面（Vue 3 + Vite）
+## 第十三部分：DebugController（校验调试接口）
 
-### 前端技术栈
-| 技术 | 版本 | 作用 |
+### 36. DebugController.java
+
+**路径：** controller/DebugController.java
+
+**这个文件是干什么的？**
+
+专门为测试和调试设计的接口，可以绕过大模型直接测试校验和执行功能。
+test_v3.js 的静态校验测试和流水线测试就是通过这些接口实现的。
+
+**提供4个接口：**
+
+| 方法 | 路径 | 功能 |
 |------|------|------|
-| Vue 3 | 3.4 | 前端框架（Composition API） |
-| Vite | 5.1 | 构建工具（开发热更新） |
-| Axios | 1.6 | HTTP 请求库 |
-| highlight.js | 11.9 | SQL 语法高亮 |
-| ECharts | 6.0 | 图表可视化（预留） |
-| Element Plus | 2.6 | UI 组件库（预留） |
+| POST | /api/debug/validate | 直接测试静态校验（手动送SQL进来） |
+| POST | /api/debug/execute | 直接测试SQL执行（跳过静态校验） |
+| POST | /api/debug/full-pipeline | 测试完整流水线（模拟多轮纠错） |
+| GET | /api/debug/schema/{dsId} | 查看提取的Schema DDL文本 |
 
-### 前端文件结构
-```
-frontend/
-├── index.html              <- 入口HTML，引入Inter字体
-├── package.json            <- 依赖清单
-├── vite.config.js          <- Vite配置（代理/api到8080）
-├── public/
-└── src/
-    ├── main.js             <- Vue应用入口
-    ├── App.vue             <- 主页面（欢迎屏+消息区+输入框）
-    ├── api/
-    │   └── index.js        <- Axios封装（6个API接口）
-    └── components/
-        ├── Sidebar.vue     <- 侧边栏（数据源管理+新建对话）
-        ├── ChatMessage.vue <- 消息组件（SQL块+表格+纠错信息）
-        └── DataSourceModal.vue <- 添加数据源弹窗
-```
+**full-pipeline 接口详解：**
+接收一个 `sqlSequence`（SQL列表），模拟大模型每轮生成的SQL。
+系统按顺序对每个SQL执行"静态校验→数据库执行"，失败就取下一个SQL，直到成功或用完。
+返回每轮的步骤详情（attempt/stage/passed/errorType/errorMessage），完整记录纠错过程。
 
-### 39. index.html（入口页面）
-
-引入 Google Fonts Inter 字体，提供更专业的排版效果。
-`<div id="app"></div>` 是 Vue 应用的挂载点。
-
-### 40. vite.config.js（Vite 构建配置）
-
-配置开发服务器端口 5173，并设置 `/api` 路径代理到后端 `localhost:8080`。
-这样前端开发时可以直接调用 `/api/xxx`，Vite 会自动转发到后端。
-
-### 41. api/index.js（API 封装）
-
-使用 Axios 封装了6个后端接口：
-- `listDataSources()` — GET /api/datasource
-- `createDataSource(data)` — POST /api/datasource
-- `testConnection(data)` — POST /api/datasource/test
-- `deleteDataSource(id)` — DELETE /api/datasource/{id}
-- `askQuestion(dataSourceId, question)` — POST /api/nl2sql
-
-响应拦截器自动解析 `res.data`，处理 `code=200` 和 `success=false` 两种情况。
-
-### 42. App.vue（主页面组件）
-
-整个应用的根组件，包含：
-- **布局**：左侧 Sidebar + 右侧主区域（flex 布局）
-- **顶栏**：左侧品牌标识 + 右侧连接状态pill（Gemini风格）
-- **欢迎屏**：当无消息时显示，含蓝色渐变图标、问候语、4个胶囊chip示例、技术标签
-- **消息区**：Gemini 风格对话列表，用户消息和AI响应交替显示
-- **输入区**：底部胶囊圆角(28px)输入框，圆形发送按钮，支持Enter发送/Shift+Enter换行
-- **数据源弹窗**：点击侧边栏的 + 按钮弹出
-
-核心逻辑：
-- `sendMessage()` — 发送问题 → 调用 `/api/nl2sql` → 解析响应 → 展示结果
-- `tryExample(text)` — 点击示例chip自动填入并发送
-- `loadDataSources()` — 页面加载时获取数据源列表
-
-### 43. Sidebar.vue（侧边栏组件）
-
-浅灰白(#f8f9fa)背景的侧边栏（Gemini风格），包含：
-- **品牌标识**：蓝色方形SVG图标 + NL2SQL 文字
-- **New Chat 按钮**：胶囊pill形，白底灰边
-- **DATA SOURCES 列表**：显示所有已注册数据源，选中项蓝色背景(#e8f0fe)
-- **折叠功能**：可收起侧边栏释放主区域空间
-- **底部标识**：Powered by DeepSeek LLM
-
-### 44. ChatMessage.vue（消息组件）
-
-根据消息类型（user/ai）渲染不同内容：
-- **用户消息**：简单文本 + 灰色圆形头像(👤)
-- **AI 消息**：
-  - 错误提示（Google红 #fce8e6 区块）
-  - SQL 代码块（深灰头部#202124 + 语法高亮 + 复制按钮）
-  - 查询结果表格（白色背景 + 灰色边框，行数badge为蓝色pill）
-  - 自纠错提示（橙色#e37400，显示重试次数）
-  - 执行耗时元信息
-- **AI头像**：✦ 星形符号 + 蓝色渐变圆形背景
-
-### 45. DataSourceModal.vue（数据源弹窗）
-
-Teleport 到 body 的模态弹窗（Gemini风格），包含：
-- **表单字段**：连接名称、数据库类型（MySQL/PostgreSQL）、主机、端口、数据库名、用户名、密码
-- **输入框**：白底+灰边框，聚焦时蓝边+蓝色阴影
-- **测试连接按钮**：pill形灰色次要按钮
-- **保存按钮**：pill形 Google蓝主按钮
-- **结果提示**：成功绿(#e6f4ea) / 失败红(#fce8e6)
-
-### 前端配色方案（2026-03-18 Gemini 风格改版 — 第二版）
-
-| 元素 | 色值 | 说明 |
-|------|------|------|
-| 主背景 | #ffffff | 纯白 |
-| 侧边栏 | #f8f9fa | 浅灰白 |
-| 主色/按钮 | #1a73e8 | Google蓝 |
-| 悬停色 | #1557b0 | 深Google蓝 |
-| 文字主色 | #1f1f1f | 纯黑 |
-| 次要文字 | #5f6368 | Google灰 |
-| 边框色 | #e8eaed / #dadce0 | Google边框灰 |
-| 背景色(hover) | #f1f3f4 | Google悬浮灰 |
-| SQL块头 | #202124 | Google深灰 |
-| SQL代码 | #292a2d | 略浅深灰 |
-| 表格头 | #f1f3f4 | 浅灰 |
-| 错误提示 | #fce8e6 + #c5221f | Google红 |
-| 成功提示 | #e6f4ea + #137333 | Google绿 |
-| 连接状态 | #34a853 | Google绿(LED常亮) |
-| 高亮蓝背景 | #e8f0fe | Google蓝浅底 |
-| AI头像 | #4285f4→#669df6 渐变 | 圆形+✦星形 |
-| 用户头像 | #e8eaed | 灰色圆形+👤 |
-| 输入框 | #f8f9fa → 聚焦白+蓝边 | 胶囊28px |
-| 发送按钮 | #1a73e8 | 圆形50% |
-| 示例chip | 白底+灰边框 | 胶囊100px横排 |
-| 纠错提示 | #e37400 | 橙色 |
+**内部DTO（用Lombok @Data定义的静态内部类）：**
+- ValidateRequest — dataSourceId + sql
+- ExecuteRequest — dataSourceId + sql
+- PipelineRequest — dataSourceId + sqlSequence(List<String>)
+- ValidateResponse — sql + valid + errorMessage + errorCategory
+- PipelineResponse — steps(List<StepResult>) + finalSuccess + finalSql + queryResult + totalRetries
+- StepResult — attempt + sql + stage + passed + errorType + errorMessage
 
 **Review 检查：**
-- OK Composition API (setup) 使用规范
-- OK 响应式设计，移动端适配
-- OK API 层统一封装，便于维护
-- OK 组件拆分合理（Sidebar/ChatMessage/DataSourceModal）
-- OK SQL 语法高亮提升了代码可读性
-- OK 错误处理完善（网络错误/业务错误都有展示）
-- OK Gemini 风格简洁专业，纯白背景视觉干净
+- OK 绕过大模型直接测试，非常适合论文中展示自验证机制效果
+- OK full-pipeline 完整模拟了纠错循环的每一步，数据可直接用于论文
+- OK 安全检查仍保留（execute接口仍然只允许SELECT）
+
+---
+
+## 第十四部分：近期完善与修复（2026-03-23~24）
+
+### DataSourceController 新增 Schema API
+
+**改动文件：** controller/DataSourceController.java
+
+新增 `GET /api/datasource/{id}/schema` 接口，注入 SchemaExtractService，
+返回结构化的 DatabaseSchema JSON（包含表名、列名、数据类型、主键、外键等完整信息）。
+前端 SchemaDrawer 抽屉面板调用此接口展示数据库结构。
+
+接口总数从5个增加到6个：
+| 方法 | 路径 | 功能 |
+|------|------|------|
+| POST | /api/datasource | 创建数据源 |
+| GET | /api/datasource | 获取所有数据源 |
+| GET | /api/datasource/{id} | 根据ID获取 |
+| DELETE | /api/datasource/{id} | 删除数据源 |
+| GET | /api/datasource/{id}/schema | **新增**：获取Schema结构 |
+| POST | /api/datasource/test | 测试连接 |
+
+---
+
+### DataSourceService 连接保护修复
+
+**改动文件：** service/DataSourceService.java
+
+**旧逻辑（有bug）：**
+```
+create() {
+    dataSourceStore.put(id, info);    // 先存内存
+    dataSourceManager.register(info);  // 再注册连接池（可能失败）
+}
+```
+问题：如果数据库名写错（如 `n2sql_tset`），register() 抛异常，但数据源已存入内存。
+后续对这个"幽灵数据源"的任何操作都会报错。
+
+**新逻辑（修复后）：**
+```
+create() {
+    try {
+        dataSourceManager.register(info);  // 先注册连接池
+    } catch (Exception e) {
+        throw new BizException("数据源连接失败: " + rootMsg);  // 失败不存内存
+    }
+    dataSourceStore.put(id, info);  // 成功后才存内存
+}
+```
+现在用户填错数据库名/密码时，收到友好的错误提示（如"数据源连接失败: Unknown database 'n2sql_tset'"），
+而不是 500 内部错误。且错误的数据源不会污染内存。
+
+---
+
+## 第十五部分：前端文件结构（Vue 3 + Vite，不做详细讲解）
+
+```
+frontend/src/
+├── main.js                 ← Vue应用入口
+├── App.vue                 ← 主页面（聊天历史管理+Schema按钮+消息区+输入区）
+├── api/
+│   └── index.js            ← Axios封装（7个API：数据源5个+NL2SQL+Schema）
+└── components/
+    ├── Sidebar.vue          ← 侧边栏（品牌+New Chat+聊天历史列表+数据源列表）
+    ├── ChatMessage.vue      ← 消息组件（SQL高亮+结果表格+图表+纠错提示）
+    ├── ChartDisplay.vue     ← ECharts图表可视化（柱状图/折线图/饼图自动切换）
+    ├── DataSourceModal.vue  ← 添加数据源弹窗（表单+测试连接+保存）
+    └── SchemaDrawer.vue     ← Schema预览抽屉面板（表/列/主键/外键可视化）
+```
+
+**前端技术栈：**
+| 技术 | 版本 | 作用 |
+|------|------|------|
+| Vue 3 | 3.4 | 前端框架（Composition API + setup语法糖） |
+| Vite | 5.1 | 构建工具（开发热更新+生产打包） |
+| Axios | 1.6 | HTTP 请求库（统一拦截器处理ApiResult格式） |
+| highlight.js | 11.9 | SQL 语法高亮 |
+| ECharts (vue-echarts) | 6.0 | 图表可视化 |
+
+**配色方案：** Gemini 风格（纯白 #ffffff + Google蓝 #1a73e8 + 浅灰侧栏 #E8EEF4）
 

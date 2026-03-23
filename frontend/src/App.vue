@@ -5,11 +5,15 @@
       :dataSources="dataSources"
       :currentId="currentDataSourceId"
       :collapsed="sidebarCollapsed"
+      :chatHistory="chatHistory"
+      :currentChatId="currentChatId"
       @toggle="sidebarCollapsed = !sidebarCollapsed"
       @select="selectDataSource"
       @addDataSource="dialogVisible = true"
       @deleteDataSource="deleteDataSource"
-      @newChat="clearChat"
+      @newChat="newChat"
+      @selectChat="selectChat"
+      @deleteChat="deleteChat"
     />
 
     <!-- Main Area -->
@@ -21,6 +25,11 @@
         </button>
         <div class="topbar-brand">NL2SQL</div>
         <div class="topbar-spacer"></div>
+        <!-- Schema Preview Button -->
+        <button v-if="currentDataSourceId" class="schema-btn" @click="schemaDrawerVisible = true" title="View Database Schema">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          Schema
+        </button>
         <div class="status-pill" v-if="currentDataSource">
           <span class="status-led"></span>
           <span>{{ currentDataSource.name }}</span>
@@ -31,7 +40,7 @@
       <!-- Messages Area -->
       <div class="messages-area" ref="messagesArea">
         <!-- Welcome Screen -->
-        <div v-if="messages.length === 0" class="welcome-screen">
+        <div v-if="currentMessages.length === 0" class="welcome-screen">
           <div class="welcome-hero">
             <div class="hero-icon">
               <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
@@ -68,7 +77,7 @@
         </div>
 
         <!-- Chat Messages -->
-        <template v-for="(msg, index) in messages" :key="index">
+        <template v-for="(msg, index) in currentMessages" :key="index">
           <div class="message-band" :class="msg.type">
             <ChatMessage :msg="msg" @copySql="copySql" />
           </div>
@@ -126,6 +135,13 @@
       @test="handleTestConnection"
       @save="handleSaveDataSource"
     />
+
+    <!-- Schema Drawer -->
+    <SchemaDrawer
+      :visible="schemaDrawerVisible"
+      :dataSourceId="currentDataSourceId"
+      @close="schemaDrawerVisible = false"
+    />
   </div>
 </template>
 
@@ -134,27 +150,86 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ChatMessage from './components/ChatMessage.vue'
 import DataSourceModal from './components/DataSourceModal.vue'
+import SchemaDrawer from './components/SchemaDrawer.vue'
 import api from './api'
 
+// ========== Data Sources ==========
 const dataSources = ref([])
 const currentDataSourceId = ref('')
-const messages = ref([])
+const dialogVisible = ref(false)
+const schemaDrawerVisible = ref(false)
+
+const currentDataSource = computed(() =>
+  dataSources.value.find(ds => ds.id === currentDataSourceId.value)
+)
+
+// ========== Chat History ==========
+const chatSessions = ref({})   // { chatId: [messages...] }
+const chatHistory = ref([])     // [{ id, title, timestamp }]
+const currentChatId = ref('')
+
+const currentMessages = computed(() => {
+  if (!currentChatId.value) return []
+  return chatSessions.value[currentChatId.value] || []
+})
+
+function generateId() {
+  return 'chat-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6)
+}
+
+function newChat() {
+  // 如果当前聊天已经是空的，不需要新建
+  if (currentChatId.value && (!chatSessions.value[currentChatId.value] || chatSessions.value[currentChatId.value].length === 0)) {
+    return
+  }
+  const id = generateId()
+  chatSessions.value[id] = []
+  currentChatId.value = id
+  // 不立即加入 chatHistory，等第一条消息时再加
+}
+
+function selectChat(id) {
+  currentChatId.value = id
+}
+
+function deleteChat(id) {
+  delete chatSessions.value[id]
+  chatHistory.value = chatHistory.value.filter(c => c.id !== id)
+  if (currentChatId.value === id) {
+    // 切换到最近的聊天或新建
+    if (chatHistory.value.length > 0) {
+      currentChatId.value = chatHistory.value[0].id
+    } else {
+      newChat()
+    }
+  }
+}
+
+function ensureChatInHistory(chatId, firstQuestion) {
+  if (!chatHistory.value.find(c => c.id === chatId)) {
+    // 取前20个字符做标题
+    const title = firstQuestion.length > 20 ? firstQuestion.slice(0, 20) + '...' : firstQuestion
+    chatHistory.value.unshift({ id: chatId, title, timestamp: Date.now() })
+  }
+}
+
+// ========== UI State ==========
 const questionInput = ref('')
 const loading = ref(false)
 const sidebarCollapsed = ref(false)
-const dialogVisible = ref(false)
 const inputFocused = ref(false)
 
 const messagesArea = ref(null)
 const scrollAnchor = ref(null)
 const inputEl = ref(null)
 
-const currentDataSource = computed(() =>
-  dataSources.value.find(ds => ds.id === currentDataSourceId.value)
-)
+// ========== Lifecycle ==========
+onMounted(() => {
+  loadDataSources()
+  newChat() // 初始化一个空聊天
+})
 
-onMounted(() => { loadDataSources() })
-
+// ========== Data Source Methods ==========
 const loadDataSources = async () => {
   try {
     const res = await api.listDataSources()
@@ -166,7 +241,6 @@ const loadDataSources = async () => {
   } catch (e) { console.error(e) }
 }
 const selectDataSource = (id) => { currentDataSourceId.value = id }
-const clearChat = () => { messages.value = [] }
 const deleteDataSource = async (id) => {
   try {
     await api.deleteDataSource(id)
@@ -187,6 +261,8 @@ const handleSaveDataSource = async (formData, doneCallback) => {
     if (res) { dialogVisible.value = false; await loadDataSources(); if (res.id) currentDataSourceId.value = res.id }
   } catch (e) { /* handled */ } finally { doneCallback() }
 }
+
+// ========== Chat Methods ==========
 const tryExample = (text) => {
   if (!currentDataSourceId.value) return
   questionInput.value = text
@@ -196,25 +272,44 @@ const handleEnter = (e) => { if (!e.shiftKey) { e.preventDefault(); sendMessage(
 const autoResize = () => {
   if (inputEl.value) { inputEl.value.style.height = 'auto'; inputEl.value.style.height = Math.min(inputEl.value.scrollHeight, 200) + 'px' }
 }
+
 const sendMessage = async () => {
   if (!questionInput.value.trim() || !currentDataSourceId.value) return
   const question = questionInput.value.trim()
-  messages.value.push({ type: 'user', content: question })
+
+  // 确保有当前聊天
+  if (!currentChatId.value) newChat()
+  const chatId = currentChatId.value
+
+  // 初始化消息数组
+  if (!chatSessions.value[chatId]) chatSessions.value[chatId] = []
+
+  // 添加用户消息
+  chatSessions.value[chatId].push({ type: 'user', content: question })
+
+  // 把这个聊天加入历史（用第一条消息做标题）
+  ensureChatInHistory(chatId, question)
+
   questionInput.value = ''
   loading.value = true
   if (inputEl.value) inputEl.value.style.height = 'auto'
   scrollToBottom()
+
   try {
     const res = await api.askQuestion(currentDataSourceId.value, question)
-    messages.value.push({
+    chatSessions.value[chatId].push({
       type: 'ai', success: res?.success ?? false, errorMessage: res?.errorMessage,
       sql: res?.generatedSql, table: res?.queryResult,
       meta: { executeTime: res?.queryResult?.executeTimeMs || 0, retryCount: res?.retryCount || 0 }
     })
   } catch (error) {
-    messages.value.push({ type: 'ai', success: false, errorMessage: 'Network error or server unavailable.', sql: null, table: null, meta: { executeTime: 0, retryCount: 0 } })
+    chatSessions.value[chatId].push({
+      type: 'ai', success: false, errorMessage: 'Network error or server unavailable.',
+      sql: null, table: null, meta: { executeTime: 0, retryCount: 0 }
+    })
   } finally { loading.value = false; scrollToBottom() }
 }
+
 const scrollToBottom = () => { nextTick(() => { scrollAnchor.value?.scrollIntoView({ behavior: 'smooth' }) }) }
 const copySql = (sql) => { navigator.clipboard.writeText(sql) }
 </script>
@@ -260,6 +355,14 @@ html, body {
 .topbar-toggle:hover { background: #f1f3f4; }
 .topbar-brand { font-size: 18px; font-weight: 600; color: #1a73e8; }
 .topbar-spacer { flex: 1; }
+.schema-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border-radius: 100px;
+  border: 1px solid #dadce0; background: #fff;
+  color: #5f6368; font-size: 13px; cursor: pointer;
+  transition: all 0.2s; font-family: inherit;
+}
+.schema-btn:hover { background: #f1f3f4; border-color: #bdc1c6; color: #1a73e8; }
 .status-pill {
   display: flex; align-items: center; gap: 6px;
   padding: 6px 14px; border-radius: 100px;

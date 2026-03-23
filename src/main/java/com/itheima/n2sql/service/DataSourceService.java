@@ -77,11 +77,22 @@ public class DataSourceService {
                 .password(request.getPassword())
                 .build();
 
-        // 4. 保存到内存
-        dataSourceStore.put(id, info);
+        // 4. 在连接池管理器中注册（创建连接池）— 先注册，成功后再存内存
+        try {
+            dataSourceManager.register(info);
+        } catch (Exception e) {
+            // 连接池初始化失败（数据库名错误、密码错误、网络不通等）
+            // 不要把错误的数据源存到内存中
+            String rootMsg = e.getMessage();
+            if (e.getCause() != null) {
+                rootMsg = e.getCause().getMessage();
+            }
+            log.warn("创建数据源失败 [{}]: {}", id, rootMsg);
+            throw new BizException("数据源连接失败: " + rootMsg);
+        }
 
-        // 5. 在连接池管理器中注册（创建连接池）
-        dataSourceManager.register(info);
+        // 5. 连接池创建成功，保存到内存
+        dataSourceStore.put(id, info);
 
         log.info("创建数据源成功: [{}] {}", id, request.getName());
         return info;

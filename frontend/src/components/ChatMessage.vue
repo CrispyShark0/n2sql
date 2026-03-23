@@ -61,6 +61,13 @@
           Query executed successfully but returned no data.
         </div>
 
+        <!-- Chart Visualization -->
+        <ChartDisplay
+          v-if="msg.table && msg.table.rows && msg.table.rows.length > 1 && msg.table.columns && msg.table.columns.length >= 2"
+          :columns="msg.table.columns"
+          :rows="msg.table.rows"
+        />
+
         <!-- Correction Info -->
         <div v-if="msg.meta && msg.meta.retryCount > 0" class="correction-info">
           ↻ Self-corrected {{ msg.meta.retryCount }} time(s)
@@ -78,6 +85,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import hljs from 'highlight.js'
+import ChartDisplay from './ChartDisplay.vue'
 
 const props = defineProps({ msg: { type: Object, required: true } })
 defineEmits(['copySql'])

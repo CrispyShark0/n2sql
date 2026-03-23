@@ -1,10 +1,12 @@
 package com.itheima.n2sql.controller;
 
 import com.itheima.n2sql.model.dto.ApiResult;
+import com.itheima.n2sql.model.dto.DatabaseSchema;
 import com.itheima.n2sql.model.dto.DataSourceCreateRequest;
 import com.itheima.n2sql.model.dto.DataSourceTestResponse;
 import com.itheima.n2sql.model.entity.DataSourceInfo;
 import com.itheima.n2sql.service.DataSourceService;
+import com.itheima.n2sql.service.SchemaExtractService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,6 +35,9 @@ public class DataSourceController {
 
     /** 数据源业务服务（Spring 自动注入） */
     private final DataSourceService dataSourceService;
+
+    /** Schema 提取服务（Spring 自动注入） */
+    private final SchemaExtractService schemaExtractService;
 
     /**
      * 创建数据源
@@ -97,6 +102,19 @@ public class DataSourceController {
         log.info("删除数据源: {}", id);
         dataSourceService.delete(id);
         return ApiResult.success();
+    }
+
+    /**
+     * 获取数据源的 Schema 结构
+     *
+     * GET /api/datasource/{id}/schema
+     * 返回数据库中所有表、列、主键、外键的结构化信息，用于前端 Schema 预览
+     */
+    @GetMapping("/{id}/schema")
+    public ApiResult<DatabaseSchema> getSchema(@PathVariable String id) {
+        log.info("获取 Schema: {}", id);
+        DatabaseSchema schema = schemaExtractService.extractSchema(id);
+        return ApiResult.success(schema);
     }
 
     /**

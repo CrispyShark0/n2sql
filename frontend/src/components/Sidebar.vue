@@ -21,6 +21,22 @@
         New Chat
       </button>
 
+      <!-- Chat History -->
+      <div v-if="chatHistory.length > 0" class="section-title">CHAT HISTORY</div>
+      <div v-if="chatHistory.length > 0" class="chat-list">
+        <div
+          v-for="chat in chatHistory" :key="chat.id"
+          class="chat-item" :class="{ active: currentChatId === chat.id }"
+          @click="$emit('selectChat', chat.id)"
+        >
+          <svg class="chat-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          <span class="chat-title">{{ chat.title }}</span>
+          <button class="chat-delete-btn" @click.stop="$emit('deleteChat', chat.id)" title="Delete">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
       <!-- Data Sources -->
       <div class="section-title">
         DATA SOURCES
@@ -65,9 +81,11 @@
 defineProps({
   dataSources: { type: Array, default: () => [] },
   currentId: { type: String, default: '' },
-  collapsed: { type: Boolean, default: false }
+  collapsed: { type: Boolean, default: false },
+  chatHistory: { type: Array, default: () => [] },
+  currentChatId: { type: String, default: '' }
 })
-defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat'])
+defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat', 'selectChat', 'deleteChat'])
 </script>
 
 <style scoped>
@@ -107,7 +125,7 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
   display: flex; align-items: center; justify-content: center; gap: 8px;
   width: 100%; padding: 10px; border: 1px solid #dadce0;
   border-radius: 100px; background: #fff; color: #1f1f1f;
-  font-size: 14px; cursor: pointer; transition: all 0.2s; margin-bottom: 20px;
+  font-size: 14px; cursor: pointer; transition: all 0.2s; margin-bottom: 16px;
   font-family: inherit;
 }
 .new-chat-btn:hover { background: #e8eaed; border-color: #bdc1c6; }
@@ -125,6 +143,31 @@ defineEmits(['toggle', 'select', 'addDataSource', 'deleteDataSource', 'newChat']
 }
 .add-ds-btn:hover { color: #1a73e8; background: #e8f0fe; }
 
+/* Chat History */
+.chat-list { margin-bottom: 16px; max-height: 200px; overflow-y: auto; }
+.chat-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 10px; border-radius: 10px; cursor: pointer;
+  transition: all 0.15s; margin-bottom: 2px;
+}
+.chat-item:hover { background: #e0e4e8; }
+.chat-item.active { background: #e8f0fe; }
+.chat-icon { flex-shrink: 0; color: #9aa0a6; }
+.chat-item.active .chat-icon { color: #1a73e8; }
+.chat-title {
+  flex: 1; font-size: 13px; color: #3c4043; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chat-item.active .chat-title { color: #1a73e8; font-weight: 500; }
+.chat-delete-btn {
+  opacity: 0; background: none; border: none; color: #9aa0a6;
+  cursor: pointer; padding: 4px; border-radius: 50%;
+  display: flex; align-items: center; transition: all 0.2s; flex-shrink: 0;
+}
+.chat-item:hover .chat-delete-btn { opacity: 1; }
+.chat-delete-btn:hover { color: #d93025; background: #fce8e6; }
+
+/* Data Sources */
 .ds-list { flex: 1; overflow-y: auto; }
 .ds-item {
   display: flex; align-items: center; gap: 10px;
